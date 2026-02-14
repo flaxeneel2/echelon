@@ -6,24 +6,21 @@ let
     };
   };
 
-  # 1. Define the SDK composition
+  platformVersion = "31"; # Android 12
+
   androidComposition = pkgs.androidenv.composeAndroidPackages {
     includeNDK = true;
-    platformVersions = [ "34" ];
+    platformVersions = [ platformVersion ];
     abiVersions = [ "x86_64" ];
     includeSystemImages = true;
-    systemImageTypes = [ "google_apis_playstore" ];
+    systemImageTypes = [ "default" ];
   };
 
-  # 2. Create a declarative emulator launcher
-  # This creates a script that automatically handles AVD creation and launch
   emulatorScript = pkgs.androidenv.emulateApp {
     name = "emulate-tauri";
-    platformVersion = "36";
+    platformVersion = platformVersion;
     abiVersion = "x86_64";
-    systemImageType = "google_apis_playstore";
-    # Optional: Set specific hardware/emulator flags
-    # sdkArgs = "-no-snapshot-load";
+    systemImageType = "default";
   };
 
   androidSdk = androidComposition.androidsdk;
