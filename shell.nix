@@ -1,13 +1,19 @@
 let
-  pkgs = import <nixpkgs> { };
+  pkgs = import <nixpkgs> {
+    config = {
+      allowUnfree = true;
+      android_sdk.accept_license = true;
+    };
+  };
+
   # Define the android composition so we can reference it in multiple places
   androidComposition = pkgs.androidenv.composeAndroidPackages {
     includeNDK = true;
-    # Add specific versions if Tauri complains, e.g., ndkVersion = "25.1.8937393";
   };
   androidSdk = androidComposition.androidsdk;
 in
 pkgs.mkShell {
+
   nativeBuildInputs = with pkgs; [
     pkg-config
     wrapGAppsHook4
@@ -25,9 +31,8 @@ pkgs.mkShell {
   shellHook = ''
     # Set Android SDK path
     export ANDROID_HOME="${androidSdk}/libexec/android-sdk"
-    
+
     # Set NDK path (Tauri specifically looks for this)
-    # The path structure in Nix can vary, but this is the standard location:
     export NDK_HOME="$ANDROID_HOME/ndk-bundle"
     
     # Ensure Java is available (Android tools need it)
