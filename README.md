@@ -37,6 +37,8 @@ bun run tauri build
 
 ### Building for android
 
+NOTE: ANDROID BUILDS ARE BROKEN FOR NOW (on nix at least, no android 36 for now, on stable)
+
 To build for android, run:
 
 ```sh
