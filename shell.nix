@@ -7,13 +7,13 @@ let
   };
 
   # Tauri seems to default to min sdk 24 so this will work for all versions from android 7 onwards
-  platformVersion = "35";
+  platformVersion = "36";
 
   androidComposition = pkgs.androidenv.composeAndroidPackages {
     includeNDK = true;
     platformVersions = [ platformVersion ];
     abiVersions = [ "x86_64" ];
-    buildToolsVersions = [ "35.0.0" ];
+    buildToolsVersions = [ "36.0.0" ];
     includeSystemImages = true;
     systemImageTypes = [ "default" ];
   };
@@ -52,7 +52,7 @@ pkgs.mkShell {
 
     # Telling it to look at the sdk we installed up above
     export GRADLE_OPTS="-Dorg.gradle.project.android.sdk.channel=0"
-    export GRADLE_OPTS="-Dorg.gradle.project.android.builder.sdkDownload=false"
+    export GRADLE_OPTS="$GRADLE_OPTS -Dorg.gradle.project.android.builder.sdkDownload=false"
     export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
 
     echo "--- Tauri Android Environment ---"
