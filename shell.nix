@@ -13,16 +13,16 @@ let
     includeNDK = true;
     platformVersions = [ platformVersion ];
     abiVersions = [ "x86_64" ];
-    buildToolsVersions = [ "36.0.0" ];
+    buildToolsVersions = [ "35.0.0" ];
     includeSystemImages = true;
-    systemImageTypes = [ "default" ];
+    systemImageTypes = [ "google_apis" ];
   };
 
   emulatorScript = pkgs.androidenv.emulateApp {
     name = "emulate-tauri";
     platformVersion = platformVersion;
     abiVersion = "x86_64";
-    systemImageType = "default";
+    systemImageType = "google_apis";
   };
 
   androidSdk = androidComposition.androidsdk;
