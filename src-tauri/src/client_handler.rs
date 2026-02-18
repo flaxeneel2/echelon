@@ -9,18 +9,23 @@ pub struct ClientHandler {
 }
 
 impl ClientHandler {
+    pub async fn new() -> Self {
+        ClientHandler {
+            matrix_client: Client::new("https://matrix.org".parse().unwrap()).await.expect("Failed to create Matrix client")
+        }
+    }
     pub async fn register(
+        &self,
         username: String,
         password: String,
         homeserver: String,
         registration_token: Option<String>
     ) -> anyhow::Result<ClientHandler> {
-        let client = Client::builder()
+        let client: Client = Client::builder()
             .homeserver_url(homeserver)
             .build()
             .await
             .expect("Failed to create Matrix client");
-
         println!("Registration token: {:?}", registration_token);
 
         let mut registration_request = RegistrationRequest::new();
@@ -78,7 +83,35 @@ impl ClientHandler {
                     Err(anyhow::anyhow!("Registration failed: {:?}", e))
                 }
             }
-
         }
+    }
+
+    // async fn get_client(&self, new_homeserver: String) -> Client {
+    //     if new_homeserver.is_empty()  || self.matrix_client.homeserver().to_string().eq(&new_homeserver) {
+    //         self.matrix_client
+    //     } else {
+    //         Client::builder()
+    //             .homeserver_url(new_homeserver)
+    //             .build()
+    //             .await
+    //             .expect("Failed to create Matrix client")
+    //     }
+    // }
+
+    pub async fn login(
+        &self,
+        username: String,
+        password: String,
+        homeserver: String
+    ) -> anyhow::Result<Option<ClientHandler>> {
+        let new_client = Client::builder()
+            .homeserver_url(homeserver)
+            .build()
+            .await
+            .expect("Failed to create Matrix client");
+        new_client.matrix_auth().login_username(&username, &password).send().await?;
+        Ok(Some(ClientHandler {
+            matrix_client: new_client
+        }))
     }
 }
