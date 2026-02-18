@@ -3,17 +3,26 @@ use matrix_sdk::{
     Client
 };
 use ruma::api::client::uiaa::{AuthData, RegistrationToken};
+use crate::events::client_events::ClientEvents;
+use crate::sync_manager::SyncManager;
 
 pub struct ClientHandler {
-    matrix_client: Client
+    matrix_client: Client,
+    pub sync_manager: SyncManager,
 }
 
 impl ClientHandler {
     pub async fn new() -> Self {
         ClientHandler {
-            matrix_client: Client::new("https://matrix.org".parse().unwrap()).await.expect("Failed to create Matrix client")
+            matrix_client: Client::new("https://matrix.org".parse().unwrap()).await.expect("Failed to create Matrix client"),
+            sync_manager: SyncManager::new(),
         }
     }
+
+    pub fn get_client(&self) -> &Client {
+        &self.matrix_client
+    }
+
     pub async fn register(
         &self,
         username: String,
@@ -47,7 +56,8 @@ impl ClientHandler {
                 println!("Registration worked immediately (no challenge-response), ID is {}", res.user_id);
                 Ok(
                     ClientHandler {
-                        matrix_client: client
+                        matrix_client: client,
+                        sync_manager: SyncManager::new(),
                     }
                 )
             },
@@ -69,7 +79,8 @@ impl ClientHandler {
                             println!("Registration successful after challenge-response, ID is {}", res.user_id);
                             Ok(
                                 ClientHandler {
-                                    matrix_client: client
+                                    matrix_client: client,
+                                    sync_manager: SyncManager::new(),
                                 }
                             )
                         },
@@ -110,8 +121,11 @@ impl ClientHandler {
             .await
             .expect("Failed to create Matrix client");
         new_client.matrix_auth().login_username(&username, &password).send().await?;
+        ClientEvents::register_events(&new_client);
         Ok(Some(ClientHandler {
-            matrix_client: new_client
+            matrix_client: new_client,
+            sync_manager: SyncManager::new(),
         }))
     }
+
 }

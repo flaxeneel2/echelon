@@ -1,7 +1,5 @@
-use std::sync::Mutex;
-use tauri::State;
-use crate::client_handler::ClientHandler;
 use crate::ClientState;
+use tauri::State;
 
 #[tauri::command]
 pub async fn register(
@@ -9,7 +7,7 @@ pub async fn register(
     password: String,
     homeserver: String,
     registration_token: Option<String>,
-    state: State<'_, ClientState>
+    state: State<'_, ClientState>,
 ) -> Result<String, String> {
     println!("Registering user: {} with password", username);
 
@@ -23,6 +21,12 @@ pub async fn register(
         .await
         .map_err(|e| format!("Registration failed: {}", e))?;
 
+    // Get the client before storing the handler
+    let client = handler.get_client().clone();
+
+    // Start the sync task
+    handler.sync_manager.start_sync(client).await;
+
     // store the new client handler into the managed state
     let mut write_guard = state.0.write().await;
     *write_guard = Some(handler);
@@ -35,7 +39,7 @@ pub async fn login(
     username: String,
     password: String,
     homeserver: Option<String>,
-    state: State<'_, ClientState>
+    state: State<'_, ClientState>,
 ) -> Result<String, String> {
     println!("Logging user: {} with password", username);
     if username.trim().is_empty() || password.trim().is_empty() {
@@ -45,12 +49,41 @@ pub async fn login(
     let client_handler = state_r.as_ref().unwrap();
     match client_handler.login(username, password, homeserver.unwrap_or("".to_string())).await {
         Ok(Some(handler)) => {
+            // Get the client before storing the handler
+            let client = handler.get_client().clone();
+
+            // Start the sync task
+            handler.sync_manager.start_sync(client).await;
+
             // store the new client handler into the managed state
             let mut write_guard = state.0.write().await;
             *write_guard = Some(handler);
+
             Ok("logged in".into())
         },
         Ok(None) => Err("Login failed: No client handler returned".into()),
         Err(e) => Err(format!("Login failed: {}", e))
     }
 }
+
+#[tauri::command]
+pub async fn logout(
+    state: State<'_, ClientState>,
+) -> Result<String, String> {
+    println!("Logging out user...");
+
+    // Stop the sync task first
+    {
+        let state_r = state.0.read().await;
+        if let Some(handler) = state_r.as_ref() {
+            handler.sync_manager.stop_sync().await;
+        }
+    }
+
+    // Clear the client state
+    let mut write_guard = state.0.write().await;
+    *write_guard = None;
+
+    Ok("logged out".into())
+}
+
