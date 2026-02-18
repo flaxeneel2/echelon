@@ -1,9 +1,10 @@
 use crate::events::client_events::ClientEvents;
 use crate::sync_manager::SyncManager;
+use matrix_sdk::authentication::matrix::MatrixSession;
 use matrix_sdk::{ruma::api::client::account::register::v3::Request as RegistrationRequest, AuthSession, Client, SessionMeta, SessionTokens};
 use ruma::api::client::uiaa::{AuthData, RegistrationToken};
+use ruma::{OwnedDeviceId, OwnedUserId};
 use std::path::Path;
-use matrix_sdk::authentication::matrix::MatrixSession;
 use tauri::{AppHandle, Manager};
 
 pub struct ClientHandler {
@@ -32,7 +33,7 @@ impl ClientHandler {
         homeserver: String,
         registration_token: Option<String>
     ) -> anyhow::Result<ClientHandler> {
-        let client: Client = self.get_new_client(&username, homeserver).await?;
+        let client: Client = self.get_new_client(&username, &homeserver).await?;
         println!("Registration token: {:?}", registration_token);
 
         let mut registration_request = RegistrationRequest::new();
@@ -43,8 +44,6 @@ impl ClientHandler {
                 RegistrationToken::new(token)
             ));
         }
-
-        println!("auth token thing {:?}", registration_request);
 
         let auth = client.matrix_auth();
 
@@ -97,7 +96,7 @@ impl ClientHandler {
         }
     }
 
-    async fn get_new_client(&self, username: &String, new_homeserver: String) -> anyhow::Result<Client> {
+    async fn get_new_client(&self, username: &String, new_homeserver: &String) -> anyhow::Result<Client> {
         Ok(
             Client::builder()
                 .homeserver_url(new_homeserver)
@@ -113,11 +112,45 @@ impl ClientHandler {
         password: String,
         homeserver: String
     ) -> anyhow::Result<Option<ClientHandler>> {
-        let new_client = self.get_new_client(&username, homeserver).await?;
-        new_client.matrix_auth().login_username(&username, &password).send().await?;
+        let new_client = self.get_new_client(&username, &homeserver).await?;
+        new_client.matrix_auth()
+            .login_username(&username, &password)
+            .initial_device_display_name("Echelon")
+            .device_id("echelon-device")
+            .send().await?;
+
+        println!("Login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
         
+        Ok(Some(ClientHandler {
+            matrix_client: new_client,
+            sync_manager: SyncManager::new(),
+            app_handle: self.app_handle.clone(),
+        }))
+    }
+
+    pub async fn restore_session(&self, username: String, homeserver: String) -> anyhow::Result<Option<ClientHandler>> {
+        let new_client = self.get_new_client(&username, &homeserver).await?;
+        let access_token = ""; // put key here temporarily for testing
+
+        new_client.restore_session(
+            AuthSession::Matrix(
+                MatrixSession {
+                    meta: SessionMeta {
+                        user_id: format!("@{}:{}", username, homeserver.replace("https://", "")).parse::<OwnedUserId>()?,
+                        device_id: OwnedDeviceId::from("echelon-device".to_string()),
+                    },
+                    tokens: SessionTokens {
+                        access_token: access_token.parse()?,
+                        refresh_token: None,
+                    }
+                }
+            )
+        ).await?;
+
+        ClientEvents::register_events(&new_client, self.app_handle.clone());
+
         Ok(Some(ClientHandler {
             matrix_client: new_client,
             sync_manager: SyncManager::new(),

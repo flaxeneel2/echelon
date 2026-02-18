@@ -87,3 +87,33 @@ pub async fn logout(
     Ok("logged out".into())
 }
 
+#[tauri::command]
+pub async fn restore_session(
+    username: String,
+    homeserver: String,
+    state: State<'_, ClientState>,
+) -> Result<String, String> {
+    println!("Restoring session for user: {}", username);
+    if username.trim().is_empty() {
+        return Err("username is required".to_string())
+    }
+    let state_r = state.0.read().await;
+    let client_handler = state_r.as_ref().unwrap();
+    match client_handler.restore_session(username, homeserver).await {
+        Ok(Some(handler)) => {
+            // Get the client before storing the handler
+            let client = handler.get_client().clone();
+
+            // Start the sync task
+            handler.sync_manager.start_sync(client).await;
+
+            // store the new client handler into the managed state
+            let mut write_guard = state.0.write().await;
+            *write_guard = Some(handler);
+
+            Ok("session restored".into())
+        },
+        Ok(None) => Err("Session restoration failed: No client handler returned".into()),
+        Err(e) => Err(format!("Session restoration failed: {}", e))
+    }
+}
