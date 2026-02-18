@@ -4,6 +4,7 @@
   let name = $state("");
   let greetMsg = $state("");
 
+  // this is temporary, just to let me test backend while others work on the frontend
   window.core = {}
   window.core.invoke = invoke
 </script>
