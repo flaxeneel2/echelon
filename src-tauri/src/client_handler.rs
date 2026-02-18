@@ -5,17 +5,20 @@ use matrix_sdk::{
 use ruma::api::client::uiaa::{AuthData, RegistrationToken};
 use crate::events::client_events::ClientEvents;
 use crate::sync_manager::SyncManager;
+use tauri::AppHandle;
 
 pub struct ClientHandler {
     matrix_client: Client,
     pub sync_manager: SyncManager,
+    app_handle: AppHandle,
 }
 
 impl ClientHandler {
-    pub async fn new() -> Self {
+    pub async fn new(app_handle: AppHandle) -> Self {
         ClientHandler {
             matrix_client: Client::new("https://matrix.org".parse().unwrap()).await.expect("Failed to create Matrix client"),
             sync_manager: SyncManager::new(),
+            app_handle,
         }
     }
 
@@ -58,6 +61,7 @@ impl ClientHandler {
                     ClientHandler {
                         matrix_client: client,
                         sync_manager: SyncManager::new(),
+                        app_handle: self.app_handle.clone(),
                     }
                 )
             },
@@ -81,6 +85,7 @@ impl ClientHandler {
                                 ClientHandler {
                                     matrix_client: client,
                                     sync_manager: SyncManager::new(),
+                                    app_handle: self.app_handle.clone(),
                                 }
                             )
                         },
@@ -121,10 +126,13 @@ impl ClientHandler {
             .await
             .expect("Failed to create Matrix client");
         new_client.matrix_auth().login_username(&username, &password).send().await?;
-        ClientEvents::register_events(&new_client);
+        
+        ClientEvents::register_events(&new_client, self.app_handle.clone());
+        
         Ok(Some(ClientHandler {
             matrix_client: new_client,
             sync_manager: SyncManager::new(),
+            app_handle: self.app_handle.clone(),
         }))
     }
 

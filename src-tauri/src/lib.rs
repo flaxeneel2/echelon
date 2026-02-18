@@ -17,7 +17,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let rt = Runtime::new().expect("failed to create runtime");
-            let client = rt.block_on(ClientHandler::new());
+            let app_handle = app.handle().clone();
+            let client = rt.block_on(ClientHandler::new(app_handle));
             let client_state = ClientState(RwLock::new(Some(client)));
 
             app.manage(client_state);

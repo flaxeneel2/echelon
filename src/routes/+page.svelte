@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
 
   let name = $state("");
   let greetMsg = $state("");
@@ -7,6 +8,7 @@
   // this is temporary, just to let me test backend while others work on the frontend
   window.core = {}
   window.core.invoke = invoke
+  window.core.listen = listen
 </script>
 
 <main class="container">
@@ -24,11 +26,6 @@
     </a>
   </div>
   <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
-
-  <form class="row" onsubmit={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
-  </form>
   <p>{greetMsg}</p>
 </main>
 
