@@ -1,11 +1,10 @@
-use matrix_sdk::{
-    ruma::api::client::account::register::v3::Request as RegistrationRequest,
-    Client
-};
-use ruma::api::client::uiaa::{AuthData, RegistrationToken};
 use crate::events::client_events::ClientEvents;
 use crate::sync_manager::SyncManager;
-use tauri::AppHandle;
+use matrix_sdk::{ruma::api::client::account::register::v3::Request as RegistrationRequest, AuthSession, Client, SessionMeta, SessionTokens};
+use ruma::api::client::uiaa::{AuthData, RegistrationToken};
+use std::path::Path;
+use matrix_sdk::authentication::matrix::MatrixSession;
+use tauri::{AppHandle, Manager};
 
 pub struct ClientHandler {
     matrix_client: Client,
@@ -33,11 +32,7 @@ impl ClientHandler {
         homeserver: String,
         registration_token: Option<String>
     ) -> anyhow::Result<ClientHandler> {
-        let client: Client = Client::builder()
-            .homeserver_url(homeserver)
-            .build()
-            .await
-            .expect("Failed to create Matrix client");
+        let client: Client = self.get_new_client(&username, homeserver).await?;
         println!("Registration token: {:?}", registration_token);
 
         let mut registration_request = RegistrationRequest::new();
@@ -49,7 +44,7 @@ impl ClientHandler {
             ));
         }
 
-        println!("auth token thting {:?}", registration_request);
+        println!("auth token thing {:?}", registration_request);
 
         let auth = client.matrix_auth();
 
@@ -102,17 +97,15 @@ impl ClientHandler {
         }
     }
 
-    // async fn get_client(&self, new_homeserver: String) -> Client {
-    //     if new_homeserver.is_empty()  || self.matrix_client.homeserver().to_string().eq(&new_homeserver) {
-    //         self.matrix_client
-    //     } else {
-    //         Client::builder()
-    //             .homeserver_url(new_homeserver)
-    //             .build()
-    //             .await
-    //             .expect("Failed to create Matrix client")
-    //     }
-    // }
+    async fn get_new_client(&self, username: &String, new_homeserver: String) -> anyhow::Result<Client> {
+        Ok(
+            Client::builder()
+                .homeserver_url(new_homeserver)
+                .sqlite_store(Path::join(&self.app_handle.path().app_data_dir()?, format!("{}_data", username)), None)
+                .build()
+                .await?
+        )
+    }
 
     pub async fn login(
         &self,
@@ -120,13 +113,9 @@ impl ClientHandler {
         password: String,
         homeserver: String
     ) -> anyhow::Result<Option<ClientHandler>> {
-        let new_client = Client::builder()
-            .homeserver_url(homeserver)
-            .build()
-            .await
-            .expect("Failed to create Matrix client");
+        let new_client = self.get_new_client(&username, homeserver).await?;
         new_client.matrix_auth().login_username(&username, &password).send().await?;
-        
+
         ClientEvents::register_events(&new_client, self.app_handle.clone());
         
         Ok(Some(ClientHandler {
