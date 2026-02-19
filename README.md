@@ -19,6 +19,24 @@ If you are on NixOS, you can use the provided `shell.nix` to get a development e
 
 Run `nix-shell shell.nix` to enter the development environment.
 
+Alternatively, you can use the provided direnv to automatically enable the environment when you cd into the project root.
+
+Ensure this is inside your configuration.nix:
+
+```nix
+  # Allows the direnv manager to always be available
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+
+    # This ensures the shell integration is loaded for bash/zsh
+    enableBashIntegration = true;
+    enableZshIntegration = true;
+  };
+```
+
+Then restart your terminal, and cd into the project directory and enable direnv by using the command it displays and the environment should work!
+
 ### Installing dependencies
 
 To install dependencies, run:
