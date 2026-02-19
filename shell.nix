@@ -29,6 +29,8 @@ let
 in
 pkgs.mkShell {
   nativeBuildInputs = with pkgs; [
+    rustc
+    openssl
     pkg-config
     wrapGAppsHook4
     cargo
@@ -50,6 +52,9 @@ pkgs.mkShell {
     export JAVA_HOME="${pkgs.zulu.home}"
     export XDG_DATA_DIRS="$GSETTINGS_SCHEMAS_PATH"
 
+    # Fix for WebKitGTK/Wayland crashes without disabling Wayland entirely
+    export WEBKIT_DISABLE_DMABUF_RENDERER=1
+    
     # Telling it to look at the sdk we installed up above
     export GRADLE_OPTS="-Dorg.gradle.project.android.sdk.channel=0"
     export GRADLE_OPTS="$GRADLE_OPTS -Dorg.gradle.project.android.builder.sdkDownload=false"
