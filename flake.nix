@@ -46,6 +46,7 @@
             wrapGAppsHook4
             cargo
             cargo-tauri
+            xdg-utils
             bun
           ];
 

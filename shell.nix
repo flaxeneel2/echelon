@@ -35,6 +35,7 @@ pkgs.mkShell {
     wrapGAppsHook4
     cargo
     cargo-tauri
+    xdg-utils
     bun
   ];
 
@@ -54,7 +55,7 @@ pkgs.mkShell {
 
     # Fix for WebKitGTK/Wayland crashes without disabling Wayland entirely
     export WEBKIT_DISABLE_DMABUF_RENDERER=1
-    
+
     # Telling it to look at the sdk we installed up above
     export GRADLE_OPTS="-Dorg.gradle.project.android.sdk.channel=0"
     export GRADLE_OPTS="$GRADLE_OPTS -Dorg.gradle.project.android.builder.sdkDownload=false"
