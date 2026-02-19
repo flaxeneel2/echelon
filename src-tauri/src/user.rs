@@ -1,5 +1,6 @@
 use crate::ClientState;
 use tauri::State;
+use crate::account::account_reset_types::AccountResetType;
 
 #[tauri::command]
 pub async fn register(
@@ -14,12 +15,15 @@ pub async fn register(
     if username.trim().is_empty() || password.trim().is_empty() {
         return Err("username and password are required".into());
     }
-    let state_r = state.0.read().await;
-    let client_handler = state_r.as_ref().unwrap();
 
-    let handler = client_handler.register(username, password, homeserver, registration_token)
-        .await
-        .map_err(|e| format!("Registration failed: {}", e))?;
+    // Call register in a separate scope to drop the read lock
+    let handler = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        client_handler.register(username, password, homeserver, registration_token).await
+    }; // Read lock is dropped here
+
+    let handler = handler.map_err(|e| format!("Registration failed: {}", e))?;
 
     // Get the client before storing the handler
     let client = handler.get_client().clone();
@@ -27,7 +31,7 @@ pub async fn register(
     // Start the sync task
     handler.sync_manager.start_sync(client).await;
 
-    // store the new client handler into the managed state
+    // Now acquire write lock - read lock has been dropped
     let mut write_guard = state.0.write().await;
     *write_guard = Some(handler);
 
@@ -45,9 +49,15 @@ pub async fn login(
     if username.trim().is_empty() || password.trim().is_empty() {
         return Err("username and password are required".to_string())
     }
-    let state_r = state.0.read().await;
-    let client_handler = state_r.as_ref().unwrap();
-    match client_handler.login(username, password, homeserver.unwrap_or("".to_string())).await {
+
+    // Call login in a separate scope to drop the read lock
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        client_handler.login(username, password, homeserver.unwrap_or("".to_string())).await
+    }; // Read lock is dropped here
+
+    match result {
         Ok(Some(handler)) => {
             // Get the client before storing the handler
             let client = handler.get_client().clone();
@@ -55,7 +65,7 @@ pub async fn login(
             // Start the sync task
             handler.sync_manager.start_sync(client).await;
 
-            // store the new client handler into the managed state
+            // Now acquire write lock - read lock has been dropped
             let mut write_guard = state.0.write().await;
             *write_guard = Some(handler);
 
@@ -87,3 +97,59 @@ pub async fn logout(
     Ok("logged out".into())
 }
 
+#[tauri::command]
+pub async fn restore_session(
+    username: String,
+    homeserver: String,
+    state: State<'_, ClientState>,
+) -> Result<String, String> {
+    println!("Restoring session for user: {}", username);
+    if username.trim().is_empty() {
+        return Err("username is required".to_string())
+    }
+
+    // Call restore_session in a separate scope to drop the read lock
+    let handler = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        client_handler.restore_session(username, homeserver).await
+    }; // Read lock is dropped here
+
+    match handler {
+        Ok(Some(handler)) => {
+            // Get the client before storing the handler
+            let client = handler.get_client().clone();
+
+            // Start the sync task
+            handler.sync_manager.start_sync(client).await;
+
+            // Now acquire write lock - read lock has been dropped
+            let mut write_guard = state.0.write().await;
+            *write_guard = Some(handler);
+
+            Ok("session restored".into())
+        },
+        Ok(None) => Err("Session restoration failed: No client handler returned".into()),
+        Err(e) => Err(format!("Session restoration failed: {}", e))
+    }
+}
+
+#[tauri::command]
+pub async fn reset_account(
+    account_reset_type: AccountResetType,
+    password: Option<String>,
+    key_backup: Option<String>,
+    state: State<'_, ClientState>
+) -> Result<String, String> {
+    // Call reset_account in a separate scope to drop the read lock
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        client_handler.reset_account(account_reset_type, password, key_backup).await
+    }; // Read lock is dropped here
+
+    match result {
+        Ok(_) => Ok("account reset successful".into()),
+        Err(e) => Err(format!("Account reset failed: {}", e))
+    }
+}

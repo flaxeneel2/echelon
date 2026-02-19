@@ -1,12 +1,14 @@
 use tauri::Manager;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
-use crate::user::{login, logout, register};
+use crate::user::{login, logout, register, reset_account, restore_session};
 
 mod user;
 mod client_handler;
 mod events;
 mod sync_manager;
+mod account;
+
 use client_handler::ClientHandler;
 
 pub struct ClientState(pub RwLock<Option<ClientHandler>>);
@@ -24,7 +26,13 @@ pub fn run() {
             app.manage(client_state);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![register, login, logout])
+        .invoke_handler(tauri::generate_handler![
+            register,
+            login,
+            logout,
+            restore_session,
+            reset_account,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

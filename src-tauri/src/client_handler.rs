@@ -1,11 +1,13 @@
-use matrix_sdk::{
-    ruma::api::client::account::register::v3::Request as RegistrationRequest,
-    Client
-};
-use ruma::api::client::uiaa::{AuthData, RegistrationToken};
 use crate::events::client_events::ClientEvents;
 use crate::sync_manager::SyncManager;
-use tauri::AppHandle;
+use matrix_sdk::authentication::matrix::MatrixSession;
+use matrix_sdk::{ruma::api::client::account::register::v3::Request as RegistrationRequest, AuthSession, Client, SessionMeta, SessionTokens};
+use ruma::api::client::uiaa::{AuthData, Password, RegistrationToken, UserIdentifier};
+use ruma::{OwnedDeviceId, OwnedUserId};
+use std::path::Path;
+use matrix_sdk::encryption::CrossSigningResetAuthType;
+use tauri::{AppHandle, Manager, Url};
+use crate::account::account_reset_types::AccountResetType;
 
 pub struct ClientHandler {
     matrix_client: Client,
@@ -33,11 +35,7 @@ impl ClientHandler {
         homeserver: String,
         registration_token: Option<String>
     ) -> anyhow::Result<ClientHandler> {
-        let client: Client = Client::builder()
-            .homeserver_url(homeserver)
-            .build()
-            .await
-            .expect("Failed to create Matrix client");
+        let client: Client = self.get_new_client(&username, &homeserver).await?;
         println!("Registration token: {:?}", registration_token);
 
         let mut registration_request = RegistrationRequest::new();
@@ -48,8 +46,6 @@ impl ClientHandler {
                 RegistrationToken::new(token)
             ));
         }
-
-        println!("auth token thting {:?}", registration_request);
 
         let auth = client.matrix_auth();
 
@@ -102,17 +98,15 @@ impl ClientHandler {
         }
     }
 
-    // async fn get_client(&self, new_homeserver: String) -> Client {
-    //     if new_homeserver.is_empty()  || self.matrix_client.homeserver().to_string().eq(&new_homeserver) {
-    //         self.matrix_client
-    //     } else {
-    //         Client::builder()
-    //             .homeserver_url(new_homeserver)
-    //             .build()
-    //             .await
-    //             .expect("Failed to create Matrix client")
-    //     }
-    // }
+    async fn get_new_client(&self, username: &String, new_homeserver: &String) -> anyhow::Result<Client> {
+        Ok(
+            Client::builder()
+                .homeserver_url(new_homeserver)
+                .sqlite_store(Path::join(&self.app_handle.path().app_data_dir()?, format!("{}_{}_data", username, Url::parse(new_homeserver)?.domain().unwrap())), None)
+                .build()
+                .await?
+        )
+    }
 
     pub async fn login(
         &self,
@@ -120,13 +114,15 @@ impl ClientHandler {
         password: String,
         homeserver: String
     ) -> anyhow::Result<Option<ClientHandler>> {
-        let new_client = Client::builder()
-            .homeserver_url(homeserver)
-            .build()
-            .await
-            .expect("Failed to create Matrix client");
-        new_client.matrix_auth().login_username(&username, &password).send().await?;
-        
+        let new_client = self.get_new_client(&username, &homeserver).await?;
+        new_client.matrix_auth()
+            .login_username(&username, &password)
+            .initial_device_display_name("Echelon")
+            .device_id("echelon-device")
+            .send().await?;
+
+        println!("Login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
+
         ClientEvents::register_events(&new_client, self.app_handle.clone());
         
         Ok(Some(ClientHandler {
@@ -134,6 +130,91 @@ impl ClientHandler {
             sync_manager: SyncManager::new(),
             app_handle: self.app_handle.clone(),
         }))
+    }
+
+    pub async fn restore_session(&self, username: String, homeserver: String) -> anyhow::Result<Option<ClientHandler>> {
+        let new_client = self.get_new_client(&username, &homeserver).await?;
+        let access_token = ""; // put key here temporarily for testing
+
+        new_client.restore_session(
+            AuthSession::Matrix(
+                MatrixSession {
+                    meta: SessionMeta {
+                        user_id: format!("@{}:{}", username, homeserver.replace("https://", "")).parse::<OwnedUserId>()?,
+                        device_id: OwnedDeviceId::from("echelon-device".to_string()),
+                    },
+                    tokens: SessionTokens {
+                        access_token: access_token.parse()?,
+                        refresh_token: None,
+                    }
+                }
+            )
+        ).await?;
+
+        ClientEvents::register_events(&new_client, self.app_handle.clone());
+
+        Ok(Some(ClientHandler {
+            matrix_client: new_client,
+            sync_manager: SyncManager::new(),
+            app_handle: self.app_handle.clone(),
+        }))
+    }
+
+    pub async fn reset_account(&self, account_reset_type: AccountResetType, password: Option<String>, key_backup: Option<String>) -> anyhow::Result<()> {
+        let client = &self.matrix_client;
+        let recovery = client.encryption().recovery();
+
+        match account_reset_type {
+            AccountResetType::IdentityReset => {
+                println!("Starting identity reset...");
+                if let Some(handle) = recovery.reset_identity().await? {
+                    match handle.auth_type() {
+                        CrossSigningResetAuthType::Uiaa(uiaa_info) => {
+                            println!("UIAA authentication required for identity reset");
+                            if let Some(pwd) = password {
+                                // Create password authentication data
+                                let user_id = client.user_id()
+                                    .ok_or_else(|| anyhow::anyhow!("No user ID available"))?;
+
+                                let mut password_auth = Password::new(
+                                    UserIdentifier::UserIdOrLocalpart(user_id.to_string()),
+                                    pwd
+                                );
+
+                                // Set the session if available
+                                if let Some(session) = &uiaa_info.session {
+                                    password_auth.session = Some(session.clone());
+                                }
+
+                                // Perform the reset with password authentication
+                                handle.reset(Some(AuthData::Password(password_auth))).await?;
+                                println!("Identity reset completed successfully");
+                            } else {
+                                return Err(anyhow::anyhow!("Password required for UIAA authentication"));
+                            }
+                        }
+                        CrossSigningResetAuthType::OAuth(oauth_info) => {
+                            println!("OAuth authentication required: {:?}", oauth_info);
+                            // For OAuth, the user needs to complete authentication via browser
+                            // This typically requires opening a browser and completing the OAuth flow
+                            handle.reset(None).await?;
+                            println!("Identity reset initiated with OAuth");
+                        }
+                    }
+                }
+            }
+            AccountResetType::KeyBackupReset => {
+                println!("Starting key backup reset...");
+
+                if let Some(key_backup) = key_backup {
+                    recovery.recover(&key_backup).await?;
+                } else {
+                    Err(anyhow::anyhow!("KeyBackup reset required for key backup reset"))?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
 }
