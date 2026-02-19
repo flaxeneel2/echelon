@@ -2,10 +2,12 @@ use crate::events::client_events::ClientEvents;
 use crate::sync_manager::SyncManager;
 use matrix_sdk::authentication::matrix::MatrixSession;
 use matrix_sdk::{ruma::api::client::account::register::v3::Request as RegistrationRequest, AuthSession, Client, SessionMeta, SessionTokens};
-use ruma::api::client::uiaa::{AuthData, RegistrationToken};
+use ruma::api::client::uiaa::{AuthData, Password, RegistrationToken, UserIdentifier};
 use ruma::{OwnedDeviceId, OwnedUserId};
 use std::path::Path;
-use tauri::{AppHandle, Manager};
+use matrix_sdk::encryption::CrossSigningResetAuthType;
+use tauri::{AppHandle, Manager, Url};
+use crate::account::account_reset_types::AccountResetType;
 
 pub struct ClientHandler {
     matrix_client: Client,
@@ -100,7 +102,7 @@ impl ClientHandler {
         Ok(
             Client::builder()
                 .homeserver_url(new_homeserver)
-                .sqlite_store(Path::join(&self.app_handle.path().app_data_dir()?, format!("{}_data", username)), None)
+                .sqlite_store(Path::join(&self.app_handle.path().app_data_dir()?, format!("{}_{}_data", username, Url::parse(new_homeserver)?.domain().unwrap())), None)
                 .build()
                 .await?
         )
@@ -156,6 +158,63 @@ impl ClientHandler {
             sync_manager: SyncManager::new(),
             app_handle: self.app_handle.clone(),
         }))
+    }
+
+    pub async fn reset_account(&self, account_reset_type: AccountResetType, password: Option<String>, key_backup: Option<String>) -> anyhow::Result<()> {
+        let client = &self.matrix_client;
+        let recovery = client.encryption().recovery();
+
+        match account_reset_type {
+            AccountResetType::IdentityReset => {
+                println!("Starting identity reset...");
+                if let Some(handle) = recovery.reset_identity().await? {
+                    match handle.auth_type() {
+                        CrossSigningResetAuthType::Uiaa(uiaa_info) => {
+                            println!("UIAA authentication required for identity reset");
+                            if let Some(pwd) = password {
+                                // Create password authentication data
+                                let user_id = client.user_id()
+                                    .ok_or_else(|| anyhow::anyhow!("No user ID available"))?;
+
+                                let mut password_auth = Password::new(
+                                    UserIdentifier::UserIdOrLocalpart(user_id.to_string()),
+                                    pwd
+                                );
+
+                                // Set the session if available
+                                if let Some(session) = &uiaa_info.session {
+                                    password_auth.session = Some(session.clone());
+                                }
+
+                                // Perform the reset with password authentication
+                                handle.reset(Some(AuthData::Password(password_auth))).await?;
+                                println!("Identity reset completed successfully");
+                            } else {
+                                return Err(anyhow::anyhow!("Password required for UIAA authentication"));
+                            }
+                        }
+                        CrossSigningResetAuthType::OAuth(oauth_info) => {
+                            println!("OAuth authentication required: {:?}", oauth_info);
+                            // For OAuth, the user needs to complete authentication via browser
+                            // This typically requires opening a browser and completing the OAuth flow
+                            handle.reset(None).await?;
+                            println!("Identity reset initiated with OAuth");
+                        }
+                    }
+                }
+            }
+            AccountResetType::KeyBackupReset => {
+                println!("Starting key backup reset...");
+
+                if let Some(key_backup) = key_backup {
+                    recovery.recover(&key_backup).await?;
+                } else {
+                    Err(anyhow::anyhow!("KeyBackup reset required for key backup reset"))?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
 }
