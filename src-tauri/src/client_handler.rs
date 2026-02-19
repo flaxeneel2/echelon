@@ -7,6 +7,7 @@ use ruma::{OwnedDeviceId, OwnedUserId};
 use std::path::Path;
 use matrix_sdk::encryption::CrossSigningResetAuthType;
 use tauri::{AppHandle, Manager, Url};
+use tracing::{debug, error};
 use crate::account::account_reset_types::AccountResetType;
 
 pub struct ClientHandler {
@@ -36,7 +37,6 @@ impl ClientHandler {
         registration_token: Option<String>
     ) -> anyhow::Result<ClientHandler> {
         let client: Client = self.get_new_client(&username, &homeserver).await?;
-        println!("Registration token: {:?}", registration_token);
 
         let mut registration_request = RegistrationRequest::new();
         registration_request.username = Some(username.clone());
@@ -52,7 +52,7 @@ impl ClientHandler {
         let reg_builder = auth.register(registration_request.clone());
         match reg_builder.await {
             Ok(res) => {
-                println!("Registration worked immediately (no challenge-response), ID is {}", res.user_id);
+                debug!("Registration worked immediately (no challenge-response), ID is {}", res.user_id);
                 Ok(
                     ClientHandler {
                         matrix_client: client,
@@ -62,10 +62,10 @@ impl ClientHandler {
                 )
             },
             Err(e) => {
-                println!("Registration failed, trying challenge-response");
+                debug!("Registration failed, trying challenge-response");
                 if let Some(uiaa_info) = e.as_uiaa_response() {
                     let session = uiaa_info.session.clone();
-                    println!("Received UIAA response with session: {:?}", session);
+                    debug!("Received UIAA response with session: {:?}", session);
 
                     let mut reg_token = RegistrationToken::new(registration_token.unwrap());
                     reg_token.session = session;
@@ -76,7 +76,7 @@ impl ClientHandler {
                     let final_response = client.matrix_auth().register(registration_request).await;
                     match final_response {
                         Ok(res) => {
-                            println!("Registration successful after challenge-response, ID is {}", res.user_id);
+                            debug!("Registration successful after challenge-response, ID is {}", res.user_id);
                             Ok(
                                 ClientHandler {
                                     matrix_client: client,
@@ -86,12 +86,12 @@ impl ClientHandler {
                             )
                         },
                         Err(e) => {
-                            println!("Registration failed after challenge-response: {:?}", e);
+                            error!("Registration failed after challenge-response: {:?}", e);
                             Err(anyhow::anyhow!("Registration failed after challenge-response: {:?}", e))
                         }
                     }
                 } else {
-                    println!("Registration failed with error: {:?}", e);
+                    error!("Registration failed with error: {:?}", e);
                     Err(anyhow::anyhow!("Registration failed: {:?}", e))
                 }
             }
@@ -121,7 +121,7 @@ impl ClientHandler {
             .device_id("echelon-device")
             .send().await?;
 
-        println!("Login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
+        debug!("Login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
         
@@ -166,11 +166,11 @@ impl ClientHandler {
 
         match account_reset_type {
             AccountResetType::IdentityReset => {
-                println!("Starting identity reset...");
+                debug!("Starting identity reset...");
                 if let Some(handle) = recovery.reset_identity().await? {
                     match handle.auth_type() {
                         CrossSigningResetAuthType::Uiaa(uiaa_info) => {
-                            println!("UIAA authentication required for identity reset");
+                            debug!("UIAA authentication required for identity reset");
                             if let Some(pwd) = password {
                                 // Create password authentication data
                                 let user_id = client.user_id()
@@ -188,23 +188,23 @@ impl ClientHandler {
 
                                 // Perform the reset with password authentication
                                 handle.reset(Some(AuthData::Password(password_auth))).await?;
-                                println!("Identity reset completed successfully");
+                                debug!("Identity reset completed successfully");
                             } else {
                                 return Err(anyhow::anyhow!("Password required for UIAA authentication"));
                             }
                         }
                         CrossSigningResetAuthType::OAuth(oauth_info) => {
-                            println!("OAuth authentication required: {:?}", oauth_info);
+                            debug!("OAuth authentication required: {:?}", oauth_info);
                             // For OAuth, the user needs to complete authentication via browser
                             // This typically requires opening a browser and completing the OAuth flow
                             handle.reset(None).await?;
-                            println!("Identity reset initiated with OAuth");
+                            debug!("Identity reset initiated with OAuth");
                         }
                     }
                 }
             }
             AccountResetType::KeyBackupReset => {
-                println!("Starting key backup reset...");
+                debug!("Starting key backup reset...");
 
                 if let Some(key_backup) = key_backup {
                     recovery.recover(&key_backup).await?;
