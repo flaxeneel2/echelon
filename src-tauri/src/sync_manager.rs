@@ -1,7 +1,7 @@
 use matrix_sdk::Client;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error};
 
 pub struct SyncManager {
     sync_handle: RwLock<Option<JoinHandle<()>>>,
