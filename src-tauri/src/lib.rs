@@ -1,7 +1,7 @@
 use tauri::Manager;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
-use crate::user::{get_rooms, get_spaces, login, logout, register, reset_account, restore_session};
+use crate::user::{get_rooms, get_space_children, get_space_hierarchy, get_spaces, login, logout, register, reset_account, restore_session};
 
 mod user;
 mod client_handler;
@@ -35,7 +35,9 @@ pub fn run() {
             restore_session,
             reset_account,
             get_spaces,
-            get_rooms
+            get_rooms,
+            get_space_children,
+            get_space_hierarchy
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

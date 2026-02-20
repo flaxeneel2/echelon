@@ -6,4 +6,5 @@ pub struct SpaceInfo {
     pub name: Option<String>,
     pub topic: Option<String>,
     pub avatar_url: Option<String>,
+    pub parent_spaces: Vec<String>,
 }
