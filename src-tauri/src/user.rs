@@ -1,7 +1,11 @@
+use futures_util::StreamExt;
+use matrix_sdk::room::ParentSpace;
 use crate::ClientState;
 use tauri::State;
 use tracing::{debug, trace};
 use crate::account::account_reset_types::AccountResetType;
+use crate::rooms::room_info::RoomInfo;
+use crate::spaces::space_info::SpaceInfo;
 
 #[tauri::command]
 pub async fn register(
@@ -153,4 +157,74 @@ pub async fn reset_account(
         Ok(_) => Ok("account reset successful".into()),
         Err(e) => Err(format!("Account reset failed: {}", e))
     }
+}
+
+#[tauri::command]
+pub async fn get_spaces(
+    state: State<'_, ClientState>
+) -> Result<String, String> {
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        client_handler.get_client().joined_space_rooms().into_iter().map(|room| {
+            let room_id = room.room_id().to_string();
+            let name = room.name();
+            let topic = room.topic();
+            let avatar_url = room.avatar_url().map(|m| m.to_string());
+            SpaceInfo {
+                id: room_id,
+                name,
+                topic,
+                avatar_url,
+            }
+        }).collect::<Vec<SpaceInfo>>()
+    };
+    Ok(serde_json::to_string(&result).unwrap())
+}
+
+#[tauri::command]
+pub async fn get_rooms(
+    state: State<'_, ClientState>
+) -> Result<String, String> {
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        let rooms = client_handler.get_client().joined_rooms();
+        let mut room_infos = Vec::new();
+        for room in rooms {
+            let room_id = room.room_id().to_string();
+            let name = room.name();
+            let topic = room.topic();
+            let avatar_url = room.avatar_url().map(|m| m.to_string());
+
+            // Collect parent spaces from the stream
+            let mut parent_spaces_stream = room.parent_spaces().await.unwrap();
+            let mut parent_spaces = Vec::new();
+            while let Some(result) = parent_spaces_stream.next().await {
+                if let Ok(parent_space) = result {
+                    match parent_space {
+                        ParentSpace::Reciprocal(room) => {
+                            parent_spaces.push(room.name().unwrap_or("Unnamed Space".to_string()));
+                        }
+                        // i dont think i need to worry about these? watch these words come bite me later
+                        ParentSpace::WithPowerlevel(_) => {}
+                        ParentSpace::Illegitimate(_) => {}
+                        ParentSpace::Unverifiable(_) => {}
+                    }
+                }
+            }
+
+            room_infos.push(
+                RoomInfo {
+                    id: room_id,
+                    name,
+                    topic,
+                    avatar_url,
+                    parent_spaces,
+                }
+            )
+        }
+        room_infos
+    };
+    Ok(serde_json::to_string(&result).unwrap())
 }
