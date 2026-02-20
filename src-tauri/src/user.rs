@@ -177,6 +177,7 @@ pub async fn get_spaces(
                 topic,
                 avatar_url,
                 parent_spaces: Vec::new(), // Root spaces have no parents
+                child_rooms: None,
             }
         }).collect::<Vec<SpaceInfo>>()
     };
@@ -230,13 +231,21 @@ pub async fn get_rooms(
     Ok(serde_json::to_string(&result).unwrap())
 }
 
+#[tauri::command]
+pub async fn get_space_tree(
+    space_id: String,
+    state: State<'_, ClientState>
+) -> Result<String, String> {
+    Ok("not implemented".into())
+}
+
 /// Gets the children of a space, including nested children, but only for joined rooms/spaces. Subspaces must be explicitly joined to appear in results.
 #[tauri::command]
 #[deprecated(note = "this is garbage code that needs to be redone.")]
 pub async fn get_space_children(
     space_id: String,
     state: State<'_, ClientState>
-) -> Result<String, String> {
+) -> Result<Vec<SpaceInfo>, String> {
     use std::pin::Pin;
     use std::future::Future;
     use std::collections::HashMap;
@@ -349,6 +358,7 @@ pub async fn get_space_children(
                                 topic: child_topic,
                                 avatar_url: child_avatar_url,
                                 parent_spaces: parent_path.clone(),
+                                child_rooms: None, // We will populate this for direct children only
                             };
 
                             all_children.push(space_info);
@@ -380,7 +390,7 @@ pub async fn get_space_children(
     };
 
     debug!("Returning {} total children (including nested)", result.len());
-    Ok(serde_json::to_string(&result).unwrap())
+    Ok(result)
 }
 
 #[tauri::command]
@@ -388,7 +398,7 @@ pub async fn get_space_children(
 pub async fn get_space_hierarchy(
     space_id: String,
     state: State<'_, ClientState>
-) -> Result<String, String> {
+) -> Result<Vec<SpaceInfo>, String> {
     use ruma::RoomId;
     use ruma::api::client::space::get_hierarchy;
     use std::collections::HashMap;
@@ -537,6 +547,7 @@ pub async fn get_space_hierarchy(
                 topic: child_topic,
                 avatar_url: child_avatar_url,
                 parent_spaces: parent_path,
+                child_rooms: None, // The hierarchy API doesn't provide child room details in the response, so we'll leave this as None
             };
 
             children.push(space_info);
@@ -546,5 +557,5 @@ pub async fn get_space_hierarchy(
     };
 
     debug!("Returning {} total children from hierarchy API", result.len());
-    Ok(serde_json::to_string(&result).unwrap())
+    Ok(result)
 }
