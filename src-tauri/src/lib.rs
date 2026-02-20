@@ -1,7 +1,7 @@
 use tauri::Manager;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
-use crate::user::{get_rooms, get_space_children, get_space_hierarchy, get_space_tree, get_spaces, login, logout, register, reset_account, restore_session};
+use crate::user::{get_rooms, get_space_tree, get_spaces, login, logout, register, reset_account, restore_session};
 
 mod user;
 mod client_handler;
@@ -36,8 +36,6 @@ pub fn run() {
             reset_account,
             get_spaces,
             get_rooms,
-            get_space_children,
-            get_space_hierarchy,
             get_space_tree
         ])
         .run(tauri::generate_context!())

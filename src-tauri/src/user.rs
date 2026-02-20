@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use anyhow::Context;
 use futures_util::StreamExt;
 use matrix_sdk::room::Room;
 use matrix_sdk::room::ParentSpace;
 use matrix_sdk::RoomState;
-use ruma::{room_id, OwnedRoomId};
+use ruma::{room_id, OwnedRoomId, RoomId};
 use ruma::api::client::space::get_hierarchy;
 use ruma::api::client::sync::sync_events::v3::JoinedRoom;
 use ruma::room::RoomType;
@@ -243,346 +244,95 @@ pub async fn get_space_tree(
     space_id: String,
     state: State<'_, ClientState>
 ) -> Result<Vec<SpaceInfo>, String> {
-    let mut rooms: Vec<SpaceInfo> = Vec::new();
-    let result = {
-        let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
-        let client = client_handler.get_client();
-        let space_room_id = OwnedRoomId::try_from(space_id).map_err(|e| e.to_string())?;
-        let room = client.get_room(&*space_room_id);
-        if let Some(room) = room {
-            if room.is_space() {
-                let request = get_hierarchy::v1::Request::new(space_room_id);
-                let response = client.send(request).await.map_err(|e| e.to_string())?;
-                debug!("Hierarchy response: {:?}", response);
-            } else {
-                Err("Given space ID does not correspond to a joined room".to_string())?
-            }
-        } else {
-            Err("Space not found".to_string())?
-        }
+    let state_r = state.0.read().await;
+    let client_handler = state_r.as_ref().unwrap();
+    let client = client_handler.get_client();
+    let space_room_id = OwnedRoomId::try_from(space_id).map_err(|e| e.to_string())?;
+    let room = client.get_room(&*space_room_id);
+
+    let Some(room) = room else {
+        return Err("Space not found".to_string());
     };
+    if !room.is_space() {
+        return Err("Given space ID does not correspond to a space room".to_string());
+    }
+
+    let request = get_hierarchy::v1::Request::new(space_room_id.clone());
+    let response: get_hierarchy::v1::Response = client.send(request).await.map_err(|e| e.to_string())?;
+
+    debug!("Space hierarchy returned {} rooms", response.rooms.len());
+
+    struct RawRoom {
+        id: String,
+        name: Option<String>,
+        topic: Option<String>,
+        avatar_url: Option<String>,
+        is_space: bool,
+    }
+
+    let mut raw_rooms: Vec<RawRoom> = Vec::new();
+    let mut child_to_parent: HashMap<String, String> = HashMap::new();
+    let mut id_to_name: HashMap<String, String> = HashMap::new();
+
+    for room_summary in &response.rooms {
+        let room_id = room_summary.summary.room_id.to_string();
+        let name = room_summary.summary.name.clone();
+        let topic = room_summary.summary.topic.clone();
+        let avatar_url = room_summary.summary.avatar_url.as_ref().map(|u| u.to_string());
+        let is_space = room_summary.summary.room_type.as_ref()
+            .map(|t| *t == RoomType::Space)
+            .unwrap_or(false);
+
+        id_to_name.insert(room_id.clone(), name.clone().unwrap_or_else(|| "Unnamed".to_string()));
+
+        for child_state in &room_summary.children_state {
+            if let Ok(deserialized) = child_state.deserialize() {
+                let child_id = deserialized.state_key.to_string();
+                // This room is the parent of child_id
+                child_to_parent.insert(child_id.clone(), room_id.clone());
+            }
+        }
+
+        debug!("  Child: {:?} ({}) - is_space: {}", name, room_id, is_space);
+
+        raw_rooms.push(RawRoom { id: room_id, name, topic, avatar_url, is_space });
+    }
+
+    let build_parent_path = |start_id: &str| -> Vec<String> {
+        let mut path: Vec<String> = Vec::new();
+        let mut current = start_id.to_string();
+        let mut visited = std::collections::HashSet::new();
+        while let Some(parent_id) = child_to_parent.get(&current) {
+            if visited.contains(parent_id) {
+                break; // cycle guard
+            }
+            visited.insert(parent_id.clone());
+            path.push(id_to_name.get(parent_id).cloned().unwrap_or_else(|| parent_id.clone()));
+            current = parent_id.clone();
+        }
+        path.reverse();
+        path
+    };
+
+    let mut rooms: Vec<SpaceInfo> = Vec::new();
+    for raw in raw_rooms {
+        let parent_spaces = build_parent_path(&raw.id);
+
+        let child_rooms = if raw.is_space {
+            Some(vec![])
+        } else {
+            None
+        };
+
+        rooms.push(SpaceInfo {
+            id: raw.id,
+            name: raw.name,
+            topic: raw.topic,
+            avatar_url: raw.avatar_url,
+            parent_spaces,
+            child_rooms,
+        });
+    }
 
     Ok(rooms)
-}
-
-/// Gets the children of a space, including nested children, but only for joined rooms/spaces. Subspaces must be explicitly joined to appear in results.
-#[tauri::command]
-#[deprecated(note = "this is garbage code that needs to be redone.")]
-pub async fn get_space_children(
-    space_id: String,
-    state: State<'_, ClientState>
-) -> Result<Vec<SpaceInfo>, String> {
-    use std::pin::Pin;
-    use std::future::Future;
-    use std::collections::HashMap;
-    use ruma::RoomId;
-
-    debug!("Getting children for space: {}", space_id);
-    debug!("NOTE: This function only returns joined rooms/spaces. Subspaces must be explicitly joined to appear in results.");
-
-    let result = {
-        let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
-        let client = client_handler.get_client();
-
-        // Parse space_id to RoomId
-        let space_room_id = <&RoomId>::try_from(space_id.as_str()).map_err(|e| format!("Invalid room ID: {}", e))?;
-
-        // Find the space room
-        let space = client.joined_rooms()
-            .into_iter()
-            .find(|room| room.room_id() == space_room_id)
-            .ok_or("Space not found")?;
-
-        let space_name = space.name().unwrap_or_else(|| "Unnamed Space".to_string());
-        debug!("Found space: {} ({})", space_name, space_id);
-
-        // Build a map of room_id/space_id -> (Room, direct_child_ids, is_space)
-        // We need to check ALL rooms (including spaces) to find children
-        let all_rooms = client.joined_rooms();
-        debug!("Total joined rooms from client: {}", all_rooms.len());
-        let mut room_map: HashMap<String, (matrix_sdk::Room, Vec<String>, bool)> = HashMap::new();
-
-        for room in all_rooms {
-            let room_id = room.room_id().to_string();
-            let room_name = room.name().unwrap_or_else(|| "Unnamed".to_string());
-            // Check if this room is a space using the is_space() method
-            // This correctly identifies both directly-joined spaces AND subspaces
-            // (unlike joined_space_rooms() which only returns directly-joined spaces)
-            let is_space = room.is_space();
-            debug!("  Room found: '{}' ({}) - is_space: {}", room_name, room_id, is_space);
-            room_map.insert(room_id.clone(), (room, Vec::new(), is_space));
-        }
-
-        debug!("Total rooms/spaces in map: {} ({} spaces)",
-            room_map.len(),
-            room_map.values().filter(|(_, _, is_space)| *is_space).count()
-        );
-
-        // Now check parent_spaces for each room/space to build parent->child relationships
-        // First collect all relationships to avoid borrow checker issues
-        let mut parent_child_pairs: Vec<(String, String)> = Vec::new();
-
-        for (child_id, (child_room, _, _)) in room_map.iter() {
-            let parent_spaces_result = child_room.parent_spaces().await;
-
-            if let Ok(mut parent_spaces_stream) = parent_spaces_result {
-                while let Some(result) = parent_spaces_stream.next().await {
-                    if let Ok(parent_space) = result {
-                        if let ParentSpace::Reciprocal(parent_room) = parent_space {
-                            let parent_id = parent_room.room_id().to_string();
-                            debug!("Found parent-child relationship: {} -> {}", parent_id, child_id);
-                            parent_child_pairs.push((parent_id, child_id.clone()));
-                        }
-                    }
-                }
-            }
-        }
-
-        debug!("Total parent-child relationships found: {}", parent_child_pairs.len());
-
-        // Now update the room_map with the collected relationships
-        for (parent_id, child_id) in parent_child_pairs {
-            if let Some((_, children, _)) = room_map.get_mut(&parent_id) {
-                children.push(child_id);
-            }
-        }
-
-        // Log how many direct children the requested space has
-        if let Some((_, children, _)) = room_map.get(&space_id) {
-            debug!("Space {} has {} direct children", space_id, children.len());
-        } else {
-            debug!("Space {} not found in room_map", space_id);
-        }
-
-        // Helper function to recursively collect children with their parent paths
-        fn collect_children_recursive<'a>(
-            space_id: &'a str,
-            parent_path: Vec<String>,
-            room_map: &'a HashMap<String, (matrix_sdk::Room, Vec<String>, bool)>,
-        ) -> Pin<Box<dyn Future<Output = Vec<SpaceInfo>> + Send + 'a>> {
-            Box::pin(async move {
-                let mut all_children = Vec::new();
-
-                if let Some((_, child_ids, _)) = room_map.get(space_id) {
-                    debug!("Processing {} children for space {}", child_ids.len(), space_id);
-                    for child_id in child_ids {
-                        if let Some((child_room, _, is_space)) = room_map.get(child_id) {
-                            let child_name = child_room.name();
-                            let child_topic = child_room.topic();
-                            let child_avatar_url = child_room.avatar_url().map(|m| m.to_string());
-
-                            debug!("  Child: {} ({}) - is_space: {}",
-                                child_name.as_ref().unwrap_or(&"Unnamed".to_string()),
-                                child_id,
-                                is_space
-                            );
-
-                            let space_info = SpaceInfo {
-                                id: child_id.clone(),
-                                name: child_name.clone(),
-                                topic: child_topic,
-                                avatar_url: child_avatar_url,
-                                parent_spaces: parent_path.clone(),
-                                child_rooms: None, // We will populate this for direct children only
-                            };
-
-                            all_children.push(space_info);
-
-                            // Only recurse if this child is also a space
-                            if *is_space {
-                                // Add current child to the path for its descendants
-                                let mut child_parent_path = parent_path.clone();
-                                child_parent_path.push(child_name.unwrap_or_else(|| "Unnamed Space".to_string()));
-
-                                debug!("  Recursing into subspace: {}", child_id);
-                                // Recursively get children of this child space
-                                let subchildren = collect_children_recursive(child_id, child_parent_path, room_map).await;
-                                debug!("  Subspace {} returned {} children", child_id, subchildren.len());
-                                all_children.extend(subchildren);
-                            }
-                        }
-                    }
-                }
-
-                all_children
-            })
-        }
-
-        // Start with the root space name in the path
-        let initial_path = vec![space_name];
-
-        collect_children_recursive(&space_id, initial_path, &room_map).await
-    };
-
-    debug!("Returning {} total children (including nested)", result.len());
-    Ok(result)
-}
-
-#[tauri::command]
-#[deprecated(note = "this is garbage code that needs to be redone.")]
-pub async fn get_space_hierarchy(
-    space_id: String,
-    state: State<'_, ClientState>
-) -> Result<Vec<SpaceInfo>, String> {
-    use ruma::RoomId;
-    use ruma::api::client::space::get_hierarchy;
-    use std::collections::HashMap;
-
-    debug!("Getting space hierarchy (including unjoined) for space: {}", space_id);
-
-    let result = {
-        let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
-        let client = client_handler.get_client();
-
-        // Parse space_id to RoomId
-        let space_room_id = <&RoomId>::try_from(space_id.as_str())
-            .map_err(|e| format!("Invalid room ID: {}", e))?;
-
-        // Get the space room to get its name for the parent path
-        let space = client.joined_rooms()
-            .into_iter()
-            .find(|room| room.room_id() == space_room_id)
-            .ok_or("Space not found")?;
-
-        let space_name = space.name().unwrap_or_else(|| "Unnamed Space".to_string());
-        debug!("Found space: {} ({})", space_name, space_id);
-
-        // Use the space hierarchy API to get all children (including unjoined)
-        let mut request = get_hierarchy::v1::Request::new(space_room_id.to_owned());
-        request.max_depth = Some(100u32.into()); // Set a reasonable depth limit
-
-        let hierarchy_response = client.send(request).await
-            .map_err(|e| format!("Failed to get space hierarchy: {}", e))?;
-
-        debug!("Space hierarchy returned {} rooms", hierarchy_response.rooms.len());
-
-        // First pass: Build a map of room_id -> (room_data, parent_ids, room_name)
-        let mut room_data_map: HashMap<String, (ruma::api::client::space::SpaceHierarchyRoomsChunk, Vec<String>, String)> = HashMap::new();
-
-        for room_summary in hierarchy_response.rooms {
-            let room_id = room_summary.summary.room_id.to_string();
-            let room_name = room_summary.summary.name.clone().unwrap_or_else(|| "Unnamed".to_string());
-
-            // Initialize with empty parent list
-            room_data_map.insert(room_id, (room_summary, Vec::new(), room_name));
-        }
-
-        // Second pass: Build parent-child relationships by examining children_state
-        // The children_state events tell us what children each room has
-        let mut parent_child_relationships: Vec<(String, String)> = Vec::new();
-
-        for (parent_id, (parent_summary, _, _)) in room_data_map.iter() {
-            for child_event in &parent_summary.children_state {
-                // Deserialize the Raw event to get the state_key (which is the child room ID)
-                if let Ok(deserialized) = child_event.deserialize() {
-                    let child_id = deserialized.state_key.to_string();
-                    debug!("  Found parent->child relationship: {} -> {}", parent_id, child_id);
-                    parent_child_relationships.push((parent_id.clone(), child_id));
-                }
-            }
-        }
-
-        // Now update the map with the relationships
-        for (parent_id, child_id) in parent_child_relationships {
-            if let Some((_, child_parents, _)) = room_data_map.get_mut(&child_id) {
-                child_parents.push(parent_id);
-            }
-        }
-
-        // Third pass: Build parent paths recursively
-        fn build_parent_path(
-            room_id: &str,
-            root_space_id: &str,
-            root_space_name: &str,
-            room_data_map: &HashMap<String, (ruma::api::client::space::SpaceHierarchyRoomsChunk, Vec<String>, String)>,
-            visited: &mut Vec<String>, // To prevent cycles
-        ) -> Vec<String> {
-            // If this is the root space, return just the root name
-            if room_id == root_space_id {
-                return vec![root_space_name.to_string()];
-            }
-
-            // If we've already visited this room (cycle detection), return empty
-            if visited.contains(&room_id.to_string()) {
-                return vec![root_space_name.to_string()];
-            }
-            visited.push(room_id.to_string());
-
-            // Get the parent IDs for this room
-            if let Some((_, parent_ids, _)) = room_data_map.get(room_id) {
-                if parent_ids.is_empty() {
-                    // No parents means it's a direct child of root
-                    return vec![root_space_name.to_string()];
-                }
-
-                // Get the first parent (in Matrix, a room can have multiple parents, but we'll use the first)
-                let parent_id = &parent_ids[0];
-
-                // Recursively build the path from the parent
-                let mut parent_path = build_parent_path(parent_id, root_space_id, root_space_name, room_data_map, visited);
-
-                // Add the parent's name to the path, but only if it's not the root space
-                // (the root space name is already in the path from the recursive call)
-                if *parent_id != root_space_id {
-                    if let Some((_, _, parent_name)) = room_data_map.get(parent_id) {
-                        parent_path.push(parent_name.clone());
-                    }
-                }
-
-                parent_path
-            } else {
-                vec![root_space_name.to_string()]
-            }
-        }
-
-        // Fourth pass: Create SpaceInfo objects with correct parent paths
-        let mut children = Vec::new();
-
-        for (child_id, (room_summary, _, _)) in room_data_map.iter() {
-            // Skip the root space itself
-            if *child_id == space_id {
-                continue;
-            }
-
-            let child_name = room_summary.summary.name.clone();
-            let child_topic = room_summary.summary.topic.clone();
-            let child_avatar_url = room_summary.summary.avatar_url.as_ref().map(|u| u.to_string());
-
-            // Determine if this is a space
-            let is_space = room_summary.summary.room_type.as_ref()
-                .map(|t| t.to_string() == "m.space")
-                .unwrap_or(false);
-
-            // Build the parent path for this room
-            let mut visited = Vec::new();
-            let parent_path = build_parent_path(child_id, &space_id, &space_name, &room_data_map, &mut visited);
-
-            debug!("  Child: {} ({}) - is_space: {}, num_joined_members: {}, parent_path: {:?}",
-                child_name.as_ref().unwrap_or(&"Unnamed".to_string()),
-                child_id,
-                is_space,
-                room_summary.summary.num_joined_members,
-                parent_path
-            );
-
-            let space_info = SpaceInfo {
-                id: child_id.clone(),
-                name: child_name,
-                topic: child_topic,
-                avatar_url: child_avatar_url,
-                parent_spaces: parent_path,
-                child_rooms: None, // The hierarchy API doesn't provide child room details in the response, so we'll leave this as None
-            };
-
-            children.push(space_info);
-        }
-
-        children
-    };
-
-    debug!("Returning {} total children from hierarchy API", result.len());
-    Ok(result)
 }
