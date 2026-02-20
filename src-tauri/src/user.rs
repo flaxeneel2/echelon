@@ -4,6 +4,7 @@ use matrix_sdk::room::Room;
 use matrix_sdk::room::ParentSpace;
 use matrix_sdk::RoomState;
 use ruma::{room_id, OwnedRoomId};
+use ruma::api::client::space::get_hierarchy;
 use ruma::api::client::sync::sync_events::v3::JoinedRoom;
 use ruma::room::RoomType;
 use crate::ClientState;
@@ -251,13 +252,9 @@ pub async fn get_space_tree(
         let room = client.get_room(&*space_room_id);
         if let Some(room) = room {
             if room.is_space() {
-                //let joined_room: JoinedRoom = room.try_into()?;
-                match room.state() {
-                    RoomState::Joined => {
-                        room
-                    }
-                    _ => Err("Given space ID does not correspond to a joined room".to_string())?
-                }
+                let request = get_hierarchy::v1::Request::new(space_room_id);
+                let response = client.send(request).await.map_err(|e| e.to_string())?;
+                debug!("Hierarchy response: {:?}", response);
             } else {
                 Err("Given space ID does not correspond to a joined room".to_string())?
             }
