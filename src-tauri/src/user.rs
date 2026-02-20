@@ -1,5 +1,11 @@
+use anyhow::Context;
 use futures_util::StreamExt;
+use matrix_sdk::room::Room;
 use matrix_sdk::room::ParentSpace;
+use matrix_sdk::RoomState;
+use ruma::{room_id, OwnedRoomId};
+use ruma::api::client::sync::sync_events::v3::JoinedRoom;
+use ruma::room::RoomType;
 use crate::ClientState;
 use tauri::State;
 use tracing::{debug, trace};
@@ -235,8 +241,32 @@ pub async fn get_rooms(
 pub async fn get_space_tree(
     space_id: String,
     state: State<'_, ClientState>
-) -> Result<String, String> {
-    Ok("not implemented".into())
+) -> Result<Vec<SpaceInfo>, String> {
+    let mut rooms: Vec<SpaceInfo> = Vec::new();
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        let client = client_handler.get_client();
+        let space_room_id = OwnedRoomId::try_from(space_id).map_err(|e| e.to_string())?;
+        let room = client.get_room(&*space_room_id);
+        if let Some(room) = room {
+            if room.is_space() {
+                //let joined_room: JoinedRoom = room.try_into()?;
+                match room.state() {
+                    RoomState::Joined => {
+                        room
+                    }
+                    _ => Err("Given space ID does not correspond to a joined room".to_string())?
+                }
+            } else {
+                Err("Given space ID does not correspond to a joined room".to_string())?
+            }
+        } else {
+            Err("Space not found".to_string())?
+        }
+    };
+
+    Ok(rooms)
 }
 
 /// Gets the children of a space, including nested children, but only for joined rooms/spaces. Subspaces must be explicitly joined to appear in results.
