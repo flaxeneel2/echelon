@@ -1,6 +1,7 @@
 use ruma::events::room::message::SyncRoomMessageEvent;
 use tauri::{AppHandle, Emitter};
 use serde::Serialize;
+use tracing::{error, trace};
 
 pub struct ClientEvents;
 
@@ -23,7 +24,7 @@ impl ClientEvents {
     }
 
     async fn on_message(event: SyncRoomMessageEvent, app_handle: AppHandle) {
-        println!("Received message: {:?}", event);
+        trace!("Received message: {:?}", event);
 
         // Get the content based on event type
         let (sender, body, event_id) = match event {
@@ -54,7 +55,7 @@ impl ClientEvents {
 
         // Emit event to frontend
         if let Err(e) = app_handle.emit("matrix:message", payload) {
-            eprintln!("Failed to emit message event: {}", e);
+            error!("Failed to emit message event: {}", e);
         }
     }
 }

@@ -9,8 +9,16 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
+        rust_overlay_src = builtins.fetchTarball {
+          url = "https://github.com/oxalica/rust-overlay/archive/master.tar.gz";
+          sha256 = "0yfi6r12pap2jfbbrijx65g0clmv5gw654hlgrapr5q3qjl6panc";
+        };
+
         pkgs = import nixpkgs {
           inherit system;
+          overlays = [
+            (import rust_overlay_src)
+          ];
           config = {
             allowUnfree = true;
             android_sdk.accept_license = true;
@@ -22,7 +30,7 @@
         androidComposition = pkgs.androidenv.composeAndroidPackages {
           includeNDK = true;
           platformVersions = [ platformVersion ];
-          abiVersions = [ "x86_64" ];
+          abiVersions = [ "x86_64" "arm64-v8a" ];
           buildToolsVersions = [ "35.0.0" ];
           includeSystemImages = true;
           systemImageTypes = [ "google_apis" ];
@@ -36,11 +44,21 @@
         };
 
         androidSdk = androidComposition.androidsdk;
+
+        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+          extensions = [ "rust-src" "rust-analysis" "clippy" "rustfmt" "rust-analyzer" ];
+          targets = [
+            "aarch64-linux-android"
+            "x86_64-unknown-linux-gnu"
+            "armv7-linux-androideabi"
+            "i686-linux-android"
+            "x86_64-linux-android"
+          ];
+        };
       in
       {
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
-            rustc
             openssl
             pkg-config
             wrapGAppsHook4
@@ -51,6 +69,7 @@
           ];
 
           buildInputs = with pkgs; [
+            rustToolchain
             librsvg
             webkitgtk_4_1
             androidSdk

@@ -1,6 +1,7 @@
 use matrix_sdk::Client;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
+use tracing::{debug, error};
 
 pub struct SyncManager {
     sync_handle: RwLock<Option<JoinHandle<()>>>,
@@ -19,17 +20,17 @@ impl SyncManager {
         self.stop_sync().await;
 
         let handle = tokio::spawn(async move {
-            println!("Starting Matrix sync loop...");
+            debug!("Starting Matrix sync loop...");
 
             let sync_settings = matrix_sdk::config::SyncSettings::default();
 
             loop {
                 match client.sync_once(sync_settings.clone()).await {
                     Ok(response) => {
-                        println!("Sync completed successfully, next batch: {}", response.next_batch);
+                        debug!("Sync completed successfully, next batch: {}", response.next_batch);
                     },
                     Err(e) => {
-                        eprintln!("Sync error: {:?}", e);
+                        error!("Sync error: {:?}", e);
                         // Wait a bit before retrying on error
                         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                     }
@@ -39,7 +40,7 @@ impl SyncManager {
 
         let mut sync_guard = self.sync_handle.write().await;
         *sync_guard = Some(handle);
-        println!("Sync task started");
+        debug!("Sync task started");
     }
 
     /// Stop the current sync loop
@@ -47,9 +48,9 @@ impl SyncManager {
         let mut sync_guard = self.sync_handle.write().await;
 
         if let Some(handle) = sync_guard.take() {
-            println!("Stopping sync task...");
+            debug!("Stopping sync task...");
             handle.abort();
-            println!("Sync task stopped");
+            debug!("Sync task stopped");
         }
     }
 

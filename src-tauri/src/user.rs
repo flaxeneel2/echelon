@@ -1,5 +1,6 @@
 use crate::ClientState;
 use tauri::State;
+use tracing::{debug, trace};
 use crate::account::account_reset_types::AccountResetType;
 
 #[tauri::command]
@@ -10,7 +11,7 @@ pub async fn register(
     registration_token: Option<String>,
     state: State<'_, ClientState>,
 ) -> Result<String, String> {
-    println!("Registering user: {} with password", username);
+    trace!("Registering user: {} with password", username);
 
     if username.trim().is_empty() || password.trim().is_empty() {
         return Err("username and password are required".into());
@@ -45,7 +46,7 @@ pub async fn login(
     homeserver: Option<String>,
     state: State<'_, ClientState>,
 ) -> Result<String, String> {
-    println!("Logging user: {} with password", username);
+    trace!("Logging user: {} with password", username);
     if username.trim().is_empty() || password.trim().is_empty() {
         return Err("username and password are required".to_string())
     }
@@ -80,7 +81,7 @@ pub async fn login(
 pub async fn logout(
     state: State<'_, ClientState>,
 ) -> Result<String, String> {
-    println!("Logging out user...");
+    debug!("Logging out user...");
 
     // Stop the sync task first
     {
@@ -103,7 +104,7 @@ pub async fn restore_session(
     homeserver: String,
     state: State<'_, ClientState>,
 ) -> Result<String, String> {
-    println!("Restoring session for user: {}", username);
+    debug!("Restoring session for user: {}", username);
     if username.trim().is_empty() {
         return Err("username is required".to_string())
     }
