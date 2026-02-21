@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use futures_util::future::join_all;
 use futures_util::StreamExt;
 use matrix_sdk::room::ParentSpace;
 use ruma::{OwnedRoomId, RoomId};
@@ -226,20 +227,41 @@ pub async fn get_rooms(
 #[tauri::command]
 pub async fn get_all_spaces_with_trees(
     state: State<'_, ClientState>
-) -> Result<Vec<SpaceInfo>, String> {
+) -> Result<HashMap<String, Vec<SpaceInfo>>, String> {
     let state_r = state.0.read().await;
     let client_handler = state_r.as_ref().unwrap();
     let client = client_handler.get_client();
 
-    let mut all_spaces: Vec<SpaceInfo> = Vec::new();
-    for space in client.joined_space_rooms() {
+
+    let tasks = client.joined_space_rooms().into_iter().map(|space| {
         let space_id = space.room_id().to_string();
-        match get_space_tree(space_id.clone(), state.clone()).await {
-            Ok(mut tree) => all_spaces.append(&mut tree),
-            Err(e) => debug!("Failed to get tree for space {}: {}", space_id, e),
+        let state_clone = state.clone();
+        async move {
+            match get_space_tree(space_id.clone(), state_clone).await {
+                Ok(tree) => {
+                    Some((space_id, tree))
+                },
+                Err(e) => {
+                    debug!("Failed to get tree for space {}: {}", space_id, e);
+                    None
+                },
+            }
+        }
+    });
+    let results = join_all(tasks).await;
+
+    let mut root_map: HashMap<String, Vec<SpaceInfo>> = HashMap::new();
+
+    for res in results {
+        match res {
+            Some((space_id, tree)) => {
+                root_map.insert(space_id, tree);
+            },
+            None => continue,
         }
     }
-    Ok(all_spaces)
+
+    Ok(root_map)
 }
 
 #[tauri::command]
