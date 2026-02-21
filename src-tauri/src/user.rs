@@ -1,12 +1,8 @@
 use std::collections::HashMap;
-use anyhow::Context;
 use futures_util::StreamExt;
-use matrix_sdk::room::Room;
 use matrix_sdk::room::ParentSpace;
-use matrix_sdk::RoomState;
-use ruma::{room_id, OwnedRoomId, RoomId};
+use ruma::{OwnedRoomId, RoomId};
 use ruma::api::client::space::get_hierarchy;
-use ruma::api::client::sync::sync_events::v3::JoinedRoom;
 use ruma::room::RoomType;
 use crate::ClientState;
 use tauri::State;
@@ -170,7 +166,7 @@ pub async fn reset_account(
 #[tauri::command]
 pub async fn get_spaces(
     state: State<'_, ClientState>
-) -> Result<String, String> {
+) -> Result<Vec<SpaceInfo>, String> {
     let result = {
         let state_r = state.0.read().await;
         let client_handler = state_r.as_ref().unwrap();
@@ -188,13 +184,14 @@ pub async fn get_spaces(
             }
         }).collect::<Vec<SpaceInfo>>()
     };
-    Ok(serde_json::to_string(&result).unwrap())
+    Ok(result)
 }
 
 #[tauri::command]
+#[deprecated(note = "I don't see why this needs to exist anymore, get_spaces + get_space_tree should cover all the same use cases and more. This function will be removed soon after i discuss w/ others")]
 pub async fn get_rooms(
     state: State<'_, ClientState>
-) -> Result<String, String> {
+) -> Result<Vec<RoomInfo>, String> {
     let result = {
         let state_r = state.0.read().await;
         let client_handler = state_r.as_ref().unwrap();
@@ -206,22 +203,7 @@ pub async fn get_rooms(
             let topic = room.topic();
             let avatar_url = room.avatar_url().map(|m| m.to_string());
 
-            // Collect parent spaces from the stream
-            let mut parent_spaces_stream = room.parent_spaces().await.unwrap();
-            let mut parent_spaces = Vec::new();
-            while let Some(result) = parent_spaces_stream.next().await {
-                if let Ok(parent_space) = result {
-                    match parent_space {
-                        ParentSpace::Reciprocal(room) => {
-                            parent_spaces.push(room.name().unwrap_or("Unnamed Space".to_string()));
-                        }
-                        // i dont think i need to worry about these? watch these words come bite me later
-                        ParentSpace::WithPowerlevel(_) => {}
-                        ParentSpace::Illegitimate(_) => {}
-                        ParentSpace::Unverifiable(_) => {}
-                    }
-                }
-            }
+
 
             room_infos.push(
                 RoomInfo {
@@ -229,13 +211,13 @@ pub async fn get_rooms(
                     name,
                     topic,
                     avatar_url,
-                    parent_spaces,
+                    parent_spaces: vec!["this function no longer returns parents, use get_space_tree instead".to_string()],
                 }
             )
         }
         room_infos
     };
-    Ok(serde_json::to_string(&result).unwrap())
+    Ok(result)
 }
 
 #[tauri::command]
