@@ -143,6 +143,7 @@ pub async fn restore_session(
     }
 }
 
+
 #[tauri::command]
 pub async fn reset_account(
     account_reset_type: AccountResetType,
@@ -203,8 +204,6 @@ pub async fn get_rooms(
             let topic = room.topic();
             let avatar_url = room.avatar_url().map(|m| m.to_string());
 
-
-
             room_infos.push(
                 RoomInfo {
                     id: room_id,
@@ -218,6 +217,29 @@ pub async fn get_rooms(
         room_infos
     };
     Ok(result)
+}
+
+
+/// This is relatively expensive, as it fetches the entire hierarchy for each space, but it is useful
+/// for the initial load of the app to get all spaces and their parent relationships in one call.
+/// For more dynamic use cases, it's better to call get_space_tree for a specific space when needed.
+#[tauri::command]
+pub async fn get_all_spaces_with_trees(
+    state: State<'_, ClientState>
+) -> Result<Vec<SpaceInfo>, String> {
+    let state_r = state.0.read().await;
+    let client_handler = state_r.as_ref().unwrap();
+    let client = client_handler.get_client();
+
+    let mut all_spaces: Vec<SpaceInfo> = Vec::new();
+    for space in client.joined_space_rooms() {
+        let space_id = space.room_id().to_string();
+        match get_space_tree(space_id.clone(), state.clone()).await {
+            Ok(mut tree) => all_spaces.append(&mut tree),
+            Err(e) => debug!("Failed to get tree for space {}: {}", space_id, e),
+        }
+    }
+    Ok(all_spaces)
 }
 
 #[tauri::command]
