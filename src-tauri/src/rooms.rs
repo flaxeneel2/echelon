@@ -1,1 +1,1 @@
-pub(crate) mod room_info;
+pub(crate) mod room_types;

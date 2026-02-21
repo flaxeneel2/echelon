@@ -6,7 +6,7 @@ use crate::ClientState;
 use tauri::State;
 use tracing::{debug, trace};
 use crate::account::account_reset_types::AccountResetType;
-use crate::rooms::room_info::RoomInfo;
+use crate::rooms::room_types::{DmRoom, RawRoom, SpaceRoom};
 use crate::spaces::raw_space::{RawSpace};
 
 #[tauri::command]
@@ -165,7 +165,7 @@ pub async fn reset_account(
 #[tauri::command]
 pub async fn get_spaces(
     state: State<'_, ClientState>
-) -> Result<Vec<RoomInfo>, String> {
+) -> Result<Vec<SpaceRoom>, String> {
     let result = {
         let state_r = state.0.read().await;
         let client_handler = state_r.as_ref().unwrap();
@@ -174,23 +174,25 @@ pub async fn get_spaces(
             let name = room.name();
             let topic = room.topic();
             let avatar_url = room.avatar_url().map(|m| m.to_string());
-            RoomInfo {
-                id: room_id,
-                name,
-                topic,
-                avatar_url,
+            SpaceRoom {
+                base: RawRoom {
+                    id: room_id,
+                    name,
+                    topic,
+                    avatar_url,
+                },
                 parent_spaces: Vec::new(), // Root spaces have no parents
             }
-        }).collect::<Vec<RoomInfo>>()
+        }).collect::<Vec<SpaceRoom>>()
     };
     Ok(result)
 }
 
 #[tauri::command]
-#[deprecated(note = "I don't see why this needs to exist anymore, get_spaces + get_space_tree should cover all the same use cases and more. This function will be removed soon after i discuss w/ others")]
+#[deprecated(note = "I don't see why this needs to exist anymore, get_all_spaces_with_trees should cover all the same use cases and more. This function will be removed soon after i discuss w/ others")]
 pub async fn get_rooms(
     state: State<'_, ClientState>
-) -> Result<Vec<RoomInfo>, String> {
+) -> Result<Vec<SpaceRoom>, String> {
     let result = {
         let state_r = state.0.read().await;
         let client_handler = state_r.as_ref().unwrap();
@@ -203,11 +205,13 @@ pub async fn get_rooms(
             let avatar_url = room.avatar_url().map(|m| m.to_string());
 
             room_infos.push(
-                RoomInfo {
-                    id: room_id,
-                    name,
-                    topic,
-                    avatar_url,
+                SpaceRoom {
+                    base: RawRoom {
+                        id: room_id,
+                        name,
+                        topic,
+                        avatar_url,
+                    },
                     parent_spaces: vec!["this function no longer returns parents, use get_space_tree instead".to_string()],
                 }
             )
@@ -271,7 +275,7 @@ pub async fn get_all_spaces_with_trees(
 pub async fn get_space_tree(
     space_id: String,
     state: State<'_, ClientState>
-) -> Result<Vec<RoomInfo>, String> {
+) -> Result<Vec<SpaceRoom>, String> {
     let state_r = state.0.read().await;
     let client_handler = state_r.as_ref().unwrap();
     let client = client_handler.get_client();
@@ -289,13 +293,6 @@ pub async fn get_space_tree(
     let response: get_hierarchy::v1::Response = client.send(request).await.map_err(|e| e.to_string())?;
 
     debug!("Space hierarchy returned {} rooms", response.rooms.len());
-
-    struct RawRoom {
-        id: String,
-        name: Option<String>,
-        topic: Option<String>,
-        avatar_url: Option<String>
-    }
 
     let mut raw_rooms: Vec<RawRoom> = Vec::new();
     let mut child_to_parent: HashMap<String, String> = HashMap::new();
@@ -338,18 +335,27 @@ pub async fn get_space_tree(
         path
     };
 
-    let mut rooms: Vec<RoomInfo> = Vec::new();
+    let mut rooms: Vec<SpaceRoom> = Vec::new();
     for raw in raw_rooms {
         let parent_spaces = build_parent_path(&raw.id);
 
-        rooms.push(RoomInfo {
-            id: raw.id,
-            name: raw.name,
-            topic: raw.topic,
-            avatar_url: raw.avatar_url,
+        rooms.push(SpaceRoom {
+            base: RawRoom {
+                id: raw.id,
+                name: raw.name,
+                topic: raw.topic,
+                avatar_url: raw.avatar_url,
+            },
             parent_spaces,
         });
     }
 
     Ok(rooms)
+}
+
+#[tauri::command]
+pub async fn get_dm_rooms(
+    state: State<'_, ClientState>
+) -> Result<Vec<DmRoom>, String> {
+    Ok(Vec::new())
 }

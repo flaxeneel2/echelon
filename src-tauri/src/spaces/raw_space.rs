@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::rooms::room_info::RoomInfo;
+use crate::rooms::room_types::SpaceRoom;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RawSpace {
@@ -7,5 +7,5 @@ pub struct RawSpace {
     pub(crate) name: Option<String>,
     pub(crate) topic: Option<String>,
     pub(crate) avatar_url: Option<String>,
-    pub(crate) rooms: Vec<RoomInfo>,
+    pub(crate) rooms: Vec<SpaceRoom>,
 }
