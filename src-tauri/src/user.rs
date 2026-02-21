@@ -192,7 +192,7 @@ pub async fn get_spaces(
 #[deprecated(note = "I don't see why this needs to exist anymore, get_all_spaces_with_trees should cover all the same use cases and more. This function will be removed soon after i discuss w/ others")]
 pub async fn get_rooms(
     state: State<'_, ClientState>
-) -> Result<Vec<SpaceRoom>, String> {
+) -> Result<Vec<RawRoom>, String> {
     let result = {
         let state_r = state.0.read().await;
         let client_handler = state_r.as_ref().unwrap();
@@ -205,14 +205,11 @@ pub async fn get_rooms(
             let avatar_url = room.avatar_url().map(|m| m.to_string());
 
             room_infos.push(
-                SpaceRoom {
-                    base: RawRoom {
-                        id: room_id,
-                        name,
-                        topic,
-                        avatar_url,
-                    },
-                    parent_spaces: vec!["this function no longer returns parents, use get_space_tree instead".to_string()],
+                RawRoom {
+                    id: room_id,
+                    name,
+                    topic,
+                    avatar_url,
                 }
             )
         }
