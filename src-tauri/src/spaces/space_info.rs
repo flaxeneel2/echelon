@@ -8,5 +8,4 @@ pub struct SpaceInfo {
     pub topic: Option<String>,
     pub avatar_url: Option<String>,
     pub parent_spaces: Vec<String>,
-    pub child_rooms: Option<Vec<RoomInfo>>,
 }

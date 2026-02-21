@@ -185,7 +185,6 @@ pub async fn get_spaces(
                 topic,
                 avatar_url,
                 parent_spaces: Vec::new(), // Root spaces have no parents
-                child_rooms: None,
             }
         }).collect::<Vec<SpaceInfo>>()
     };
@@ -318,19 +317,12 @@ pub async fn get_space_tree(
     for raw in raw_rooms {
         let parent_spaces = build_parent_path(&raw.id);
 
-        let child_rooms = if raw.is_space {
-            Some(vec![])
-        } else {
-            None
-        };
-
         rooms.push(SpaceInfo {
             id: raw.id,
             name: raw.name,
             topic: raw.topic,
             avatar_url: raw.avatar_url,
             parent_spaces,
-            child_rooms,
         });
     }
 
