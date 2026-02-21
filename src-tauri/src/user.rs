@@ -10,7 +10,7 @@ use tauri::State;
 use tracing::{debug, trace};
 use crate::account::account_reset_types::AccountResetType;
 use crate::rooms::room_info::RoomInfo;
-use crate::spaces::space_info::SpaceInfo;
+use crate::spaces::space_info::{RawSpace, SpaceInfo};
 
 #[tauri::command]
 pub async fn register(
@@ -227,7 +227,7 @@ pub async fn get_rooms(
 #[tauri::command]
 pub async fn get_all_spaces_with_trees(
     state: State<'_, ClientState>
-) -> Result<HashMap<String, Vec<SpaceInfo>>, String> {
+) -> Result<HashMap<String, RawSpace>, String> {
     let state_r = state.0.read().await;
     let client_handler = state_r.as_ref().unwrap();
     let client = client_handler.get_client();
@@ -239,7 +239,13 @@ pub async fn get_all_spaces_with_trees(
         async move {
             match get_space_tree(space_id.clone(), state_clone).await {
                 Ok(tree) => {
-                    Some((space_id, tree))
+                    Some(RawSpace {
+                        id: space_id,
+                        name: space.name(),
+                        topic: space.topic(),
+                        avatar_url: space.avatar_url().map(|m| m.to_string()),
+                        rooms: tree,
+                    })
                 },
                 Err(e) => {
                     debug!("Failed to get tree for space {}: {}", space_id, e);
@@ -250,12 +256,12 @@ pub async fn get_all_spaces_with_trees(
     });
     let results = join_all(tasks).await;
 
-    let mut root_map: HashMap<String, Vec<SpaceInfo>> = HashMap::new();
+    let mut root_map: HashMap<String, RawSpace> = HashMap::new();
 
     for res in results {
         match res {
-            Some((space_id, tree)) => {
-                root_map.insert(space_id, tree);
+            Some(raw_space) => {
+                root_map.insert(raw_space.id.clone(), raw_space);
             },
             None => continue,
         }

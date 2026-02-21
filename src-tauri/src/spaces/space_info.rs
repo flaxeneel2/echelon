@@ -9,3 +9,12 @@ pub struct SpaceInfo {
     pub avatar_url: Option<String>,
     pub parent_spaces: Vec<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawSpace {
+    pub(crate) id: String,
+    pub(crate) name: Option<String>,
+    pub(crate) topic: Option<String>,
+    pub(crate) avatar_url: Option<String>,
+    pub(crate) rooms: Vec<SpaceInfo>,
+}
