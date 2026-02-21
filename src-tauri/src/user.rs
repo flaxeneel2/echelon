@@ -1,16 +1,13 @@
 use std::collections::HashMap;
 use futures_util::future::join_all;
-use futures_util::StreamExt;
-use matrix_sdk::room::ParentSpace;
-use ruma::{OwnedRoomId, RoomId};
+use ruma::{OwnedRoomId};
 use ruma::api::client::space::get_hierarchy;
-use ruma::room::RoomType;
 use crate::ClientState;
 use tauri::State;
 use tracing::{debug, trace};
 use crate::account::account_reset_types::AccountResetType;
 use crate::rooms::room_info::RoomInfo;
-use crate::spaces::space_info::{RawSpace, SpaceInfo};
+use crate::spaces::raw_space::{RawSpace};
 
 #[tauri::command]
 pub async fn register(
@@ -168,7 +165,7 @@ pub async fn reset_account(
 #[tauri::command]
 pub async fn get_spaces(
     state: State<'_, ClientState>
-) -> Result<Vec<SpaceInfo>, String> {
+) -> Result<Vec<RoomInfo>, String> {
     let result = {
         let state_r = state.0.read().await;
         let client_handler = state_r.as_ref().unwrap();
@@ -177,14 +174,14 @@ pub async fn get_spaces(
             let name = room.name();
             let topic = room.topic();
             let avatar_url = room.avatar_url().map(|m| m.to_string());
-            SpaceInfo {
+            RoomInfo {
                 id: room_id,
                 name,
                 topic,
                 avatar_url,
                 parent_spaces: Vec::new(), // Root spaces have no parents
             }
-        }).collect::<Vec<SpaceInfo>>()
+        }).collect::<Vec<RoomInfo>>()
     };
     Ok(result)
 }
@@ -274,7 +271,7 @@ pub async fn get_all_spaces_with_trees(
 pub async fn get_space_tree(
     space_id: String,
     state: State<'_, ClientState>
-) -> Result<Vec<SpaceInfo>, String> {
+) -> Result<Vec<RoomInfo>, String> {
     let state_r = state.0.read().await;
     let client_handler = state_r.as_ref().unwrap();
     let client = client_handler.get_client();
@@ -297,8 +294,7 @@ pub async fn get_space_tree(
         id: String,
         name: Option<String>,
         topic: Option<String>,
-        avatar_url: Option<String>,
-        is_space: bool,
+        avatar_url: Option<String>
     }
 
     let mut raw_rooms: Vec<RawRoom> = Vec::new();
@@ -310,9 +306,6 @@ pub async fn get_space_tree(
         let name = room_summary.summary.name.clone();
         let topic = room_summary.summary.topic.clone();
         let avatar_url = room_summary.summary.avatar_url.as_ref().map(|u| u.to_string());
-        let is_space = room_summary.summary.room_type.as_ref()
-            .map(|t| *t == RoomType::Space)
-            .unwrap_or(false);
 
         id_to_name.insert(room_id.clone(), name.clone().unwrap_or_else(|| "Unnamed".to_string()));
 
@@ -324,9 +317,9 @@ pub async fn get_space_tree(
             }
         }
 
-        debug!("  Child: {:?} ({}) - is_space: {}", name, room_id, is_space);
+        debug!("  Child: {:?} ({})", name, room_id);
 
-        raw_rooms.push(RawRoom { id: room_id, name, topic, avatar_url, is_space });
+        raw_rooms.push(RawRoom { id: room_id, name, topic, avatar_url });
     }
 
     let build_parent_path = |start_id: &str| -> Vec<String> {
@@ -345,11 +338,11 @@ pub async fn get_space_tree(
         path
     };
 
-    let mut rooms: Vec<SpaceInfo> = Vec::new();
+    let mut rooms: Vec<RoomInfo> = Vec::new();
     for raw in raw_rooms {
         let parent_spaces = build_parent_path(&raw.id);
 
-        rooms.push(SpaceInfo {
+        rooms.push(RoomInfo {
             id: raw.id,
             name: raw.name,
             topic: raw.topic,
