@@ -238,10 +238,12 @@ pub async fn get_all_spaces_with_trees(
             match get_space_tree(space_id.clone(), state_clone).await {
                 Ok(tree) => {
                     Some(RawSpace {
-                        id: space_id,
-                        name: space.name(),
-                        topic: space.topic(),
-                        avatar_url: space.avatar_url().map(|m| m.to_string()),
+                        raw_room: RawRoom {
+                            id: space_id,
+                            name: space.name(),
+                            topic: space.topic(),
+                            avatar_url: space.avatar_url().map(|m| m.to_string()),
+                        },
                         rooms: tree,
                     })
                 },
@@ -259,7 +261,7 @@ pub async fn get_all_spaces_with_trees(
     for res in results {
         match res {
             Some(raw_space) => {
-                root_map.insert(raw_space.id.clone(), raw_space);
+                root_map.insert(raw_space.raw_room.id.clone(), raw_space);
             },
             None => continue,
         }

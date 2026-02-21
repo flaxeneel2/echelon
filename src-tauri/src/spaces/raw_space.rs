@@ -1,11 +1,9 @@
 use serde::{Deserialize, Serialize};
-use crate::rooms::room_types::SpaceRoom;
+use crate::rooms::room_types::{RawRoom, SpaceRoom};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RawSpace {
-    pub(crate) id: String,
-    pub(crate) name: Option<String>,
-    pub(crate) topic: Option<String>,
-    pub(crate) avatar_url: Option<String>,
+    #[serde(flatten)]
+    pub(crate) raw_room: RawRoom,
     pub(crate) rooms: Vec<SpaceRoom>,
 }
