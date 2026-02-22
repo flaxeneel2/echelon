@@ -1,10 +1,23 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import {invoke, type InvokeArgs} from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
   // this is temporary, just to let me test backend while others work on the frontend
   window.core = {}
-  window.core.invoke = invoke
+  window.core.invoke_no_timer = invoke
+  window.core.invoke = async (fn_to_invoke: string, args: InvokeArgs|undefined) => {
+    const start = performance.now(); // Start timer
+
+    try {
+      const res = await invoke(fn_to_invoke, args);
+
+      const end = performance.now(); // End timer
+      console.log(`Fetch took ${end - start} milliseconds.`);
+      console.log(`Fetched data:`, res)
+    } catch (error) {
+      console.error("Command failed:", error);
+    }
+  }
   window.core.listen = listen
 
   let username = $state("");
