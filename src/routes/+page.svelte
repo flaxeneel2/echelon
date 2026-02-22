@@ -24,6 +24,18 @@
       loading = false;
     }
   }
+
+  async function OAuth_login() {
+    error="";
+    loading = true;
+    try {
+      await invoke("oauth_login", { homeserver });
+    } catch (e) {
+      error = String(e);
+    } finally {
+      loading = false;
+    }
+  }
 </script>
 
 <main class="container">
@@ -69,8 +81,12 @@
         <p class="error">{error}</p>
       {/if}
 
-      <button type="submit" disabled={loading}>
+      <button class="submit-button" type="submit" disabled={loading}>
         {loading ? "Signing in..." : "Sign in"}
+      </button>
+      
+      <button class="oauth-button" type="button" onclick={OAuth_login} disabled={loading}>
+        <span>{loading ? "Signing in..." : "OAuth Login"}</span>
       </button>
     </form>
   </div>
@@ -169,9 +185,9 @@
     color: #444;
   }
 
-  button {
+  .submit-button {
     margin-top: 0.5rem;
-    background-color: #2563eb;
+    background-color: #003097;
     color: #fff;
     border: none;
     border-radius: 8px;
@@ -181,6 +197,35 @@
     font-family: inherit;
     cursor: pointer;
     transition: background-color 0.2s, opacity 0.2s;
+  }
+
+  .oauth-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    background-color: #1a1a1a;
+    color: #f0f0f0;
+    font-size: 0.95rem;
+    font-weight: 500;
+    font-family: inherit;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 0.7rem;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+    width: 100%;
+  }
+
+  .oauth-button:hover {
+    background-color: #222;
+    border-color: #2563eb;
+  }
+
+  .oauth-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
   }
 
   button:hover:not(:disabled) {

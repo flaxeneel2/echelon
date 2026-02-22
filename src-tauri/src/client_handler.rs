@@ -1,14 +1,23 @@
-use crate::events::client_events::ClientEvents;
-use crate::sync_manager::SyncManager;
-use matrix_sdk::authentication::matrix::MatrixSession;
-use matrix_sdk::{ruma::api::client::account::register::v3::Request as RegistrationRequest, AuthSession, Client, SessionMeta, SessionTokens};
-use ruma::api::client::uiaa::{AuthData, Password, RegistrationToken, UserIdentifier};
-use ruma::{OwnedDeviceId, OwnedUserId};
 use std::path::Path;
-use matrix_sdk::encryption::CrossSigningResetAuthType;
 use tauri::{AppHandle, Manager, Url};
 use tracing::{debug, error};
+use crate::events::client_events::ClientEvents;
+use crate::sync_manager::SyncManager;
 use crate::account::account_reset_types::AccountResetType;
+use ruma::api::client::uiaa::{AuthData, Password, RegistrationToken, UserIdentifier};
+use ruma::{OwnedDeviceId, OwnedUserId};
+use matrix_sdk::{ruma::api::client::account::register::v3::Request as RegistrationRequest, stream, AuthSession, Client, SessionMeta, SessionTokens};
+use matrix_sdk::authentication::matrix::MatrixSession;
+use matrix_sdk::authentication::oauth;
+use matrix_sdk::encryption::CrossSigningResetAuthType;
+use matrix_sdk::authentication::oauth::{ClientRegistrationData, CsrfToken};
+use matrix_sdk::authentication::oauth::registration::{ApplicationType, ClientMetadata, Localized, OAuthGrantType};
+use ruma::api::client::discovery::get_authorization_server_metadata::v1::GrantType;
+use ruma::serde::Raw;
+use tauri::CursorIcon::Default;
+use tauri_plugin_opener::OpenerExt;
+use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::net::TcpListener;
 
 pub struct ClientHandler {
     matrix_client: Client,
@@ -108,6 +117,12 @@ impl ClientHandler {
         )
     }
 
+    async fn get_oauth_client(&self, new_homeserver: &String)-> anyhow::Result<Client> {
+        let homeserver_url : Url = Url::parse(new_homeserver)?;
+        let client = Client::new(homeserver_url).await?;
+        Ok(client)
+    }
+
     pub async fn login(
         &self,
         username: String,
@@ -130,6 +145,76 @@ impl ClientHandler {
             sync_manager: SyncManager::new(),
             app_handle: self.app_handle.clone(),
         }))
+    }
+
+    // Provides functionality for the oauth_login
+    pub async fn oauth_login(
+        &self,
+        homeserver: String,
+        login: bool,
+    ) -> anyhow::Result<Option<ClientHandler>> {
+        // Create and generate an OAuth Handler
+        let new_client = self.get_oauth_client(&homeserver).await?;
+        let oauth = new_client.oauth();
+
+        // Fetch metadata from homeserver to ensure that it supports OAuth
+        // If it fails, it throws an exception to user.rs::oauth_login which passes it to front-end
+        let server_metadata = oauth.server_metadata().await?;
+
+        // If no exception, OAuth is supported, so we generate a csrf token
+        let csrf_token = oauth::CsrfToken::new_random();
+
+        // Make a listener to listen on a random port decided by the OS, so no Race Conditions occur when picking a port
+        // Create the redirect URI
+        let listener : TcpListener = TcpListener::bind("127.0.0.1:0").await?;
+        let port= listener.local_addr()?.port();
+        let redirect_uri : Url= Url::parse(&format!("http://127.0.0.1:{}/oauth/callback", port))?;
+
+        // If user has registered and is logging in
+        if (login) {
+            // TODO implement once we add the client ID to the sqlite db/stronghold vault
+            // oauth.restore_registered_client()
+        }
+
+        // If the user hasn't registered
+        else {
+            // Empty vector because we have no language tags currently, client url is meant to be client home page,  but is informational
+            let url = Url::parse("https://github.com/flaxeneel2/echelon/")?;
+            let new_client_url = Localized::new(url, Vec::new());
+            let grant_types : Vec<OAuthGrantType> = vec![
+                OAuthGrantType::AuthorizationCode {
+                    redirect_uris: vec![redirect_uri.clone()],
+                } ,
+                OAuthGrantType::DeviceCode];
+
+            let client_metadata = ClientMetadata::new(ApplicationType::Native, grant_types, new_client_url);
+            let raw_client_metadata = Raw::new(&client_metadata)?;
+            let registration_response = oauth.register_client(&raw_client_metadata).await?;
+        }
+        // Has 4 parameters, first one is explained above, second is Device ID if None then it randomizes,
+        // third explained above, last is additional_scopes
+        let auth_data = oauth.login(redirect_uri, None, None, None).build().await?;
+        let csrf_token = auth_data.state;
+        let redirect_url = auth_data.url;
+        self.app_handle.opener().open_url(redirect_url, None::<&str>)?;
+
+        // Wait for response
+        match listener.accept().await {
+            Ok((mut stream, addr)) => {
+                println!("new client: {:?}", addr);
+                let mut buffer = vec![0u8; 1024];
+                let n = stream.read(&mut buffer).await?;
+                let request = String::from_utf8_lossy(&buffer[..n]);
+
+                let received_state : String = request.parse()?;
+                let received
+
+            },
+            Err(e)=> println!("couldn't get client: {:?}" , e),
+        };
+
+
+        Ok(None)
     }
 
     pub async fn restore_session(&self, username: String, homeserver: String) -> anyhow::Result<Option<ClientHandler>> {

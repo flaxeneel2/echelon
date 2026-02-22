@@ -4,6 +4,40 @@ use tracing::{debug, trace};
 use crate::account::account_reset_types::AccountResetType;
 
 #[tauri::command]
+pub async fn oauth_login(
+    homeserver: String,
+    state: State<'_, ClientState>,
+) -> Result<String, String> {
+    trace!("Starting OAuth login for homeserver: {}", homeserver);
+    if homeserver.trim().is_empty() {
+        return Err("homeserver is required".to_string());
+    }
+
+    let state_r = state.0.read().await;
+    let client_handler = state_r.as_ref().unwrap();
+    client_handler.oauth_login(homeserver, true).await;
+
+    Ok("oauth_login initiated".into())
+}
+
+#[tauri::command]
+pub async fn oauth_register(
+    homeserver: String,
+    state: State<'_, ClientState>,
+) -> Result<String, String> {
+    trace!("Starting OAuth login for homeserver: {}", homeserver);
+    if homeserver.trim().is_empty() {
+        return Err("homeserver is required".to_string());
+    }
+
+    let state_r = state.0.read().await;
+    let client_handler = state_r.as_ref().unwrap();
+    client_handler.oauth_login(homeserver, false).await;
+
+    Ok("oauth_login initiated".into())
+}
+
+#[tauri::command]
 pub async fn register(
     username: String,
     password: String,
