@@ -19,5 +19,5 @@ pub struct SpaceRoom {
 pub struct DmRoom {
     #[serde(flatten)]
     pub base: RawRoom,
-    pub other_user_id: String
+    pub members: Vec<String>
 }
