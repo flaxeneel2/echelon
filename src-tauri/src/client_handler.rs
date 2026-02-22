@@ -6,17 +6,15 @@ use crate::sync_manager::SyncManager;
 use crate::account::account_reset_types::AccountResetType;
 use ruma::api::client::uiaa::{AuthData, Password, RegistrationToken, UserIdentifier};
 use ruma::{OwnedDeviceId, OwnedUserId};
-use matrix_sdk::{ruma::api::client::account::register::v3::Request as RegistrationRequest, stream, AuthSession, Client, SessionMeta, SessionTokens};
+use matrix_sdk::{ruma::api::client::account::register::v3::Request as RegistrationRequest, AuthSession, Client, SessionMeta, SessionTokens};
 use matrix_sdk::authentication::matrix::MatrixSession;
-use matrix_sdk::authentication::oauth;
 use matrix_sdk::encryption::CrossSigningResetAuthType;
-use matrix_sdk::authentication::oauth::{ClientRegistrationData, CsrfToken};
 use matrix_sdk::authentication::oauth::registration::{ApplicationType, ClientMetadata, Localized, OAuthGrantType};
-use ruma::api::client::discovery::get_authorization_server_metadata::v1::GrantType;
+use matrix_sdk::authentication::oauth::UrlOrQuery;
 use ruma::serde::Raw;
 use tauri::CursorIcon::Default;
 use tauri_plugin_opener::OpenerExt;
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 pub struct ClientHandler {
@@ -147,7 +145,13 @@ impl ClientHandler {
         }))
     }
 
-    // Provides functionality for the oauth_login
+    ///
+    ///
+    ///
+    ///
+    ///
+    ///
+    ///
     pub async fn oauth_login(
         &self,
         homeserver: String,
@@ -159,10 +163,7 @@ impl ClientHandler {
 
         // Fetch metadata from homeserver to ensure that it supports OAuth
         // If it fails, it throws an exception to user.rs::oauth_login which passes it to front-end
-        let server_metadata = oauth.server_metadata().await?;
-
-        // If no exception, OAuth is supported, so we generate a csrf token
-        let csrf_token = oauth::CsrfToken::new_random();
+        oauth.server_metadata().await?;
 
         // Make a listener to listen on a random port decided by the OS, so no Race Conditions occur when picking a port
         // Create the redirect URI
@@ -171,7 +172,7 @@ impl ClientHandler {
         let redirect_uri : Url= Url::parse(&format!("http://127.0.0.1:{}/oauth/callback", port))?;
 
         // If user has registered and is logging in
-        if (login) {
+        if login {
             // TODO implement once we add the client ID to the sqlite db/stronghold vault
             // oauth.restore_registered_client()
         }
@@ -189,12 +190,11 @@ impl ClientHandler {
 
             let client_metadata = ClientMetadata::new(ApplicationType::Native, grant_types, new_client_url);
             let raw_client_metadata = Raw::new(&client_metadata)?;
-            let registration_response = oauth.register_client(&raw_client_metadata).await?;
+            oauth.register_client(&raw_client_metadata).await?;
         }
         // Has 4 parameters, first one is explained above, second is Device ID if None then it randomizes,
         // third explained above, last is additional_scopes
-        let auth_data = oauth.login(redirect_uri, None, None, None).build().await?;
-        let csrf_token = auth_data.state;
+        let auth_data = oauth.login(redirect_uri.clone(), None, None, None).build().await?;
         let redirect_url = auth_data.url;
         self.app_handle.opener().open_url(redirect_url, None::<&str>)?;
 
@@ -206,15 +206,39 @@ impl ClientHandler {
                 let n = stream.read(&mut buffer).await?;
                 let request = String::from_utf8_lossy(&buffer[..n]);
 
-                let received_state : String = request.parse()?;
-                let received
+                let request_string : String = request.parse()?;
+                if let Some(header_string)=request_string.lines().next() {
+                    let split_header : Vec<&str> = header_string.split(' ').collect();
+                    let get_request = split_header.get(1)
+                        .ok_or_else(|| anyhow::anyhow!("Malformed HTTP request"))?;
+                    let result_url = redirect_uri.join(get_request)?;
 
+                    oauth.finish_login(UrlOrQuery::Url(result_url)).await?;
+
+                    let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
+                        <link rel=\"icon\" href=\"data:,\">
+                        <html><body>\
+                        <h2>Login successful!</h2>\
+                        <p>You can close this tab and return to Echelon.</p>\
+                        </body></html>";
+                    stream.write_all(response.as_bytes()).await?;
+                    stream.flush().await?;
+
+                    debug!("OAuth login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
+
+                    ClientEvents::register_events(&new_client, self.app_handle.clone());
+
+                    return Ok(Some(ClientHandler {
+                        matrix_client: new_client,
+                        sync_manager: SyncManager::new(),
+                        app_handle: self.app_handle.clone(),
+                    }));
+                }
             },
-            Err(e)=> println!("couldn't get client: {:?}" , e),
+            Err(e) => println!("couldn't get client: {:?}", e),
         };
 
-
-        Ok(None)
+        Err(anyhow::anyhow!("OAuth login failed: no valid redirect received"))
     }
 
     pub async fn restore_session(&self, username: String, homeserver: String) -> anyhow::Result<Option<ClientHandler>> {

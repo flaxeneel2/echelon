@@ -13,11 +13,23 @@ pub async fn oauth_login(
         return Err("homeserver is required".to_string());
     }
 
-    let state_r = state.0.read().await;
-    let client_handler = state_r.as_ref().unwrap();
-    client_handler.oauth_login(homeserver, true).await;
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        client_handler.oauth_login(homeserver, true).await
+    };
 
-    Ok("oauth_login initiated".into())
+    match result {
+        Ok(Some(handler)) => {
+            let client = handler.get_client().clone();
+            handler.sync_manager.start_sync(client).await;
+            let mut write_guard = state.0.write().await;
+            *write_guard = Some(handler);
+            Ok("oauth login successful".into())
+        },
+        Ok(None) => Err("OAuth login failed: no handler returned".into()),
+        Err(e) => Err(format!("OAuth login failed: {}", e)),
+    }
 }
 
 #[tauri::command]
@@ -25,16 +37,28 @@ pub async fn oauth_register(
     homeserver: String,
     state: State<'_, ClientState>,
 ) -> Result<String, String> {
-    trace!("Starting OAuth login for homeserver: {}", homeserver);
+    trace!("Starting OAuth register for homeserver: {}", homeserver);
     if homeserver.trim().is_empty() {
         return Err("homeserver is required".to_string());
     }
 
-    let state_r = state.0.read().await;
-    let client_handler = state_r.as_ref().unwrap();
-    client_handler.oauth_login(homeserver, false).await;
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        client_handler.oauth_login(homeserver, false).await
+    };
 
-    Ok("oauth_login initiated".into())
+    match result {
+        Ok(Some(handler)) => {
+            let client = handler.get_client().clone();
+            handler.sync_manager.start_sync(client).await;
+            let mut write_guard = state.0.write().await;
+            *write_guard = Some(handler);
+            Ok("oauth registration successful".into())
+        },
+        Ok(None) => Err("OAuth registration failed: no handler returned".into()),
+        Err(e) => Err(format!("OAuth registration failed: {}", e)),
+    }
 }
 
 #[tauri::command]

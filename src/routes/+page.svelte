@@ -36,6 +36,18 @@
       loading = false;
     }
   }
+
+  async function OAuth_register() {
+    error="";
+    loading = true;
+    try {
+      await invoke("oauth_register", { homeserver });
+    } catch (e) {
+      error = String(e);
+    } finally {
+      loading = false;
+    }
+  }
 </script>
 
 <main class="container">
@@ -87,6 +99,9 @@
       
       <button class="oauth-button" type="button" onclick={OAuth_login} disabled={loading}>
         <span>{loading ? "Signing in..." : "OAuth Login"}</span>
+      </button>
+      <button class="oauth-button" type="button" onclick={OAuth_register} disabled={loading}>
+        <span>{loading ? "Registering..." : "OAuth Register"}</span>
       </button>
     </form>
   </div>
