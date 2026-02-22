@@ -1,4 +1,5 @@
 use matrix_sdk::Client;
+use matrix_sdk::config::SyncSettings;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::{debug, error};
@@ -19,22 +20,25 @@ impl SyncManager {
         // Stop any existing sync first
         self.stop_sync().await;
 
-        debug!("Performing initial sync...");
-        let sync_settings = matrix_sdk::config::SyncSettings::default();
-        match client.sync_once(sync_settings.clone()).await {
-            Ok(_) => {
-                debug!("Initial sync successful");
-            }
-            Err(e) => {
-                error!("Initial Sync failed: {}", e);
-            }
-        };
+        let sync_settings = SyncSettings::default();
+
+        client.sync_once(sync_settings.clone()).await.expect("failed to perform initial sync");
 
         let handle = tokio::spawn(async move {
             debug!("Starting Matrix sync loop...");
 
-            if let Err(e) = client.sync(sync_settings).await {
-                error!("Sync ended with error: {:?}", e);
+
+            loop {
+                match client.sync_once(sync_settings.clone()).await {
+                    Ok(response) => {
+                        debug!("Sync completed successfully, next batch: {}", response.next_batch);
+                    },
+                    Err(e) => {
+                        error!("Sync error: {:?}", e);
+                        // Wait a bit before retrying on error
+                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                    }
+                }
             }
         });
 
