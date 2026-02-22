@@ -12,6 +12,16 @@ use crate::account::account_reset_types::AccountResetType;
 use crate::rooms::room_types::{DmRoom, RawRoom, SpaceRoom};
 use crate::spaces::raw_space::{RawSpace};
 
+
+/// Register a new user with the given username, password, and homeserver. Optionally takes a
+/// registration token if the homeserver requires it.
+///
+/// # Arguments
+/// * `username` - The desired username for the new account.
+/// * `password` - The desired password for the new account.
+/// * `homeserver` - The URL of the homeserver to register the account on.
+/// * `registration_token` - An optional registration token, required if the homeserver has registration restrictions that require it.
+/// * `state` - The client state containing the Matrix client to perform the
 #[tauri::command]
 pub async fn register(
     username: String,
@@ -48,11 +58,18 @@ pub async fn register(
     Ok("registered".into())
 }
 
+/// Log in a user with the given username, password, and homeserver.
+///
+/// # Arguments
+/// * `username` - The username of the account to log in to.
+/// * `password` - The password of the account to log in to.
+/// * `homeserver` - The URL of the homeserver to log in to.
+/// * `state` - The client state containing the Matrix client to perform the login on.
 #[tauri::command]
 pub async fn login(
     username: String,
     password: String,
-    homeserver: Option<String>,
+    homeserver: String,
     state: State<'_, ClientState>,
 ) -> Result<String, String> {
     trace!("Logging user: {} with password", username);
@@ -64,7 +81,7 @@ pub async fn login(
     let result = {
         let state_r = state.0.read().await;
         let client_handler = state_r.as_ref().unwrap();
-        client_handler.login(username, password, homeserver.unwrap_or("".to_string())).await
+        client_handler.login(username, password, homeserver).await
     }; // Read lock is dropped here
 
     match result {
@@ -107,6 +124,14 @@ pub async fn logout(
     Ok("logged out".into())
 }
 
+/// Restore a previous session for the given username and homeserver. This will attempt to load the session
+/// from the client's store, and if successful, will start the sync loop for that session.
+/// This is used for session persistence across app restarts.
+///
+/// # Arguments
+/// * `username` - The username of the session to restore, used to identify the correct
+/// * `homeserver` - The homeserver of the session to restore, used to identify the correct session in case of multiple sessions for different homeservers
+/// * `state` - The client state containing the Matrix client to perform the session restoration on
 #[tauri::command]
 pub async fn restore_session(
     username: String,
@@ -145,6 +170,16 @@ pub async fn restore_session(
 }
 
 
+/// Reset the account based on the specified reset type and provided credentials or backup key.
+/// This function handles different types of account resets, such as password reset or complete
+/// account wipe, depending on the `AccountResetType` provided.
+///
+/// # Arguments
+/// * `account_reset_type` - The type of account reset to perform, defined by the
+///   `AccountResetType` enum, which specifies the reset method (e.g., password reset, key backup, etc.).
+/// * `password` - An optional password, required for identity reset
+/// * `key_backup` - An optional key backup, required for key backup reset
+/// * `state` - The client state containing the Matrix client to perform the reset operation on
 #[tauri::command]
 pub async fn reset_account(
     account_reset_type: AccountResetType,
@@ -165,6 +200,15 @@ pub async fn reset_account(
     }
 }
 
+/// Get the joined spaces. This is for when the frontend only requires spaces and not their full hierarchies
+/// This could serve as a quick placeholder while the hierarchies are being loaded.
+///
+/// # Arguments
+/// * `state` - The client state containing the Matrix client to fetch spaces from.
+///
+/// ### Returns
+///
+/// A list of `SpaceRoom` objects representing the spaces the user has joined, with their parent spaces listed in order from immediate parent to root space. The list includes only the spaces themselves, without any of the rooms under those spaces. For a more detailed hierarchy including all rooms under each space, use [`get_all_spaces_with_trees`] or [`get_space_tree`] instead.
 #[tauri::command]
 pub async fn get_spaces(
     state: State<'_, ClientState>
@@ -192,6 +236,11 @@ pub async fn get_spaces(
     Ok(result)
 }
 
+
+/// Get all joined rooms, including spaces and non-spaces. This was gonna be used to build hierarchy
+/// trees in the frontend, but [`get_space_tree`] and [`get_all_spaces_with_trees`] do it all in the backend,
+/// making this function redundant. It is still here for now but will definitely be released in future
+/// iterations. Please just use [`get_all_spaces_with_trees`] instead
 #[tauri::command]
 #[deprecated(note = "I don't see why this needs to exist anymore, get_all_spaces_with_trees should cover all the same use cases and more. This function will be removed soon after i discuss w/ others")]
 pub async fn get_rooms(
@@ -226,20 +275,33 @@ pub async fn get_rooms(
 
 /// This is relatively expensive, as it fetches the entire hierarchy for each space, but it is useful
 /// for the initial load of the app to get all spaces and their parent relationships in one call.
-/// For more dynamic use cases, it's better to call get_space_tree for a specific space when needed.
+/// For more dynamic use cases, it's better to call [`get_space_tree`] for a specific space when needed.
+///
+/// # Arguments
+/// * `state` - The client state containing the Matrix client to fetch spaces and their hierarchies
+///
+/// ### Returns
+/// A map of space ID to RawSpace, where each RawSpace contains the basic room info for the space
+/// as well as a list of all rooms in the hierarchy under that space. This allows the frontend to
+/// build the entire space tree structure without needing to make additional calls to fetch the
+/// hierarchy for each individual space.
 #[tauri::command]
 pub async fn get_all_spaces_with_trees(
     state: State<'_, ClientState>
 ) -> Result<HashMap<String, RawSpace>, String> {
+    // get the client
     let state_r = state.0.read().await;
     let client_handler = state_r.as_ref().unwrap();
     let client = client_handler.get_client();
 
-
+    // collect all the futures so we can join on all of them at once afterward.
     let tasks = client.joined_space_rooms().into_iter().map(|space| {
         let space_id = space.room_id().to_string();
         let state_clone = state.clone();
         async move {
+            // use the get_space_tree function to fetch the entire hierarchy for this space,
+            // if it fails for any reason, log the error and skip this space instead of failing the
+            // whole function, since we want to be resilient to individual spaces having issues
             match get_space_tree(space_id.clone(), state_clone).await {
                 Ok(tree) => {
                     Some(RawSpace {
@@ -276,17 +338,33 @@ pub async fn get_all_spaces_with_trees(
     Ok(root_map)
 }
 
+/// Fetches the entire hierarchy of rooms under a given space, including the parent-child relationships.
+/// This is used for building the space tree view in the UI, where we need to know not just the
+/// rooms under a space, but also how they are nested within subspaces.
+///
+/// # Arguments
+/// * `space_id` - The ID of the space to fetch the hierarchy for.
+/// * `state` - The client state containing the Matrix client to fetch rooms from.
+///
+/// ### Returns
+/// A list of `SpaceRoom` objects representing all rooms in the hierarchy under the given space,
+/// with their parent spaces listed in order from immediate parent to root space. The list includes
+/// the space itself as the first item, followed by all descendant rooms and spaces.
 #[tauri::command]
 pub async fn get_space_tree(
     space_id: String,
     state: State<'_, ClientState>
 ) -> Result<Vec<SpaceRoom>, String> {
+    // get client
     let state_r = state.0.read().await;
     let client_handler = state_r.as_ref().unwrap();
     let client = client_handler.get_client();
+
+    // try turn the space id into an [`OwnedRoomId`] and fetch the room, if any of that fails, return an error
     let space_room_id = OwnedRoomId::try_from(space_id).map_err(|e| e.to_string())?;
     let room = client.get_room(&*space_room_id);
 
+    // some basic error handling, if no room then say not found, if room isn't a space then say that instead
     let Some(room) = room else {
         return Err("Space not found".to_string());
     };
@@ -294,11 +372,14 @@ pub async fn get_space_tree(
         return Err("Given space ID does not correspond to a space room".to_string());
     }
 
+
+    // construct and send the get_hierarchy request for the given space, this will return a list of all rooms in the hierarchy under that space
     let request = get_hierarchy::v1::Request::new(space_room_id.clone());
     let response: get_hierarchy::v1::Response = client.send(request).await.map_err(|e| e.to_string())?;
 
     debug!("Space hierarchy returned {} rooms", response.rooms.len());
 
+    // we want to get the rooms, as well as the child to parent relationships
     let mut raw_rooms: Vec<RawRoom> = Vec::new();
     let mut child_to_parent: HashMap<String, String> = HashMap::new();
     let mut id_to_name: HashMap<String, String> = HashMap::new();
@@ -325,6 +406,9 @@ pub async fn get_space_tree(
         raw_rooms.push(RawRoom { id: room_id, name, topic, avatar_url, is_space });
     }
 
+    // we use this to build the parent path for each room, we look up the parent of the room in the
+    // child_to_parent map, then look up the name of that parent room in the id_to_name map, and
+    // repeat until we reach the root space (which has no parent)
     let build_parent_path = |start_id: &str| -> Vec<String> {
         let mut path: Vec<String> = Vec::new();
         let mut current = start_id.to_string();
@@ -341,6 +425,7 @@ pub async fn get_space_tree(
         path
     };
 
+    // finally, build them all up into a Vec<SpaceRoom>
     let mut rooms: Vec<SpaceRoom> = Vec::new();
     for raw in raw_rooms {
         let parent_spaces = build_parent_path(&raw.id);
@@ -360,49 +445,64 @@ pub async fn get_space_tree(
     Ok(rooms)
 }
 
+/// Get the DM rooms, this gets both the 1:1 rooms (ones marked with `m.direct`) and any group DM
+/// rooms.
+///
+/// The fetching of group dms is handled by [`get_orphaned_rooms()`], read its doc to understand more
+/// about the logic behind marking a room as a "group dm" room.
+///
+/// # Arguments
+/// * `state` - The client state containing the Matrix client to fetch rooms from.
 #[tauri::command]
 pub async fn get_dm_rooms(
     state: State<'_, ClientState>
 ) -> Result<Vec<DmRoom>, String> {
+    // get the client
     let state_r = state.0.read().await;
     let client_handler = state_r.as_ref().unwrap();
     let client = client_handler.get_client();
+    // final dm rooms vec we will return
     let mut dm_rooms: Vec<DmRoom> = Vec::new();
 
+    // fetch rooms with `m.direct` type account data, these are guaranteed to be 1:1 rooms, so we can directly map the room id to the user id of the other person in the dm and construct our DmRoom objects
     let direct_rooms = client
         .state_store()
         .get_account_data_event(GlobalAccountDataEventType::Direct)
         .await
         .map_err(|e| e.to_string())?;
+    // try unwrap the direct rooms we got back
     if let Some(direct_rooms) = direct_rooms {
+        // try deserializing it
         if let Ok(deserialized) = direct_rooms.deserialize() {
            match deserialized {
-                AnyGlobalAccountDataEvent::Direct(direct_data) => {
-                    let mut dm_room_user_map: HashMap<OwnedRoomId, Vec<OwnedDirectUserIdentifier>> = HashMap::new();
-                    for (user_id, room_ids) in direct_data.content {
-                        for room_id in room_ids {
-                            dm_room_user_map.entry(room_id).or_insert_with(Vec::new).push(user_id.clone());
-                        }
-                    }
-                    for (room_id, user_ids) in dm_room_user_map {
-                        if let Some(room) = client.get_room(&room_id) {
-                            let name = room.name();
-                            let topic = room.topic();
-                            let avatar_url = room.avatar_url().map(|u| u.to_string());
-                            dm_rooms.push(DmRoom {
-                                base: RawRoom {
-                                    id: room_id.to_string(),
-                                    name,
-                                    topic,
-                                    avatar_url,
-                                    is_space: false,
-                                },
-                                members: user_ids.into_iter().map(|u| u.to_string()).collect(),
-                            });
-                        }
-                    }
-                }
-                _ => error!("Unexpected account data event type, how"),
+               AnyGlobalAccountDataEvent::Direct(direct_data) => {
+                   let mut dm_room_user_map: HashMap<OwnedRoomId, Vec<OwnedDirectUserIdentifier>> = HashMap::new();
+                   for (user_id, room_ids) in direct_data.content {
+                       for room_id in room_ids {
+                           // for each room, map the users in that room, we will use this later to construct the DmRoom objects with the correct members
+                           dm_room_user_map.entry(room_id).or_insert_with(Vec::new).push(user_id.clone());
+                       }
+                   }
+                   for (room_id, user_ids) in dm_room_user_map {
+                       if let Some(room) = client.get_room(&room_id) {
+                           let name = room.name();
+                           let topic = room.topic();
+                           let avatar_url = room.avatar_url().map(|u| u.to_string());
+                           dm_rooms.push(DmRoom {
+                               base: RawRoom {
+                                   id: room_id.to_string(),
+                                   name,
+                                   topic,
+                                   avatar_url,
+                                   is_space: false,
+                               },
+                               members: user_ids.into_iter().map(|u| u.to_string()).collect(),
+                           });
+                       }
+                   }
+               }
+               // we should have only gotten direct data, so if we got something else, log an error
+               _ => error!("Unexpected account data event type, how"),
             }
         } else {
             error!("Failed to deserialize direct rooms data")
@@ -410,12 +510,23 @@ pub async fn get_dm_rooms(
     } else {
         error!("No direct message rooms found")
     }
+    // also get orphaned rooms (group dms, probably) and add it to the list before returning it
     let mut other_rooms = get_orphaned_rooms(client).await?;
     dm_rooms.append(&mut other_rooms);
 
     Ok(dm_rooms)
 }
 
+/// Fetches rooms that the client is joined to which are not spaces and do not have a
+/// parent space via m.space.parent events.
+/// This is used for catching DM rooms that may not be listed in the m.direct account data (group
+/// chats aren't technically `m.direct` because it's not 1:1), as well as any other non-space rooms
+/// that are not properly linked to a parent space, for example legacy rooms that were made before spaces existed.
+/// This is a fallback to ensure we don't miss any DM rooms, but ideally all DM rooms should be
+/// discoverable via the m.direct account data and this function should return an empty list.
+///
+/// # Arguments
+/// * `client` - The Matrix client to use for fetching rooms and their state.
 async fn get_orphaned_rooms(client: &Client) -> Result<Vec<DmRoom>, String> {
     let non_space_rooms = client
         .joined_rooms()
@@ -437,6 +548,7 @@ async fn get_orphaned_rooms(client: &Client) -> Result<Vec<DmRoom>, String> {
                 return None;
             }
 
+            // extract the room details and members to construct a DmRoom
             let room_id = room.room_id().to_string();
             let name = room.name();
             let topic = room.topic();
@@ -455,6 +567,7 @@ async fn get_orphaned_rooms(client: &Client) -> Result<Vec<DmRoom>, String> {
         });
     }
 
+    // wait for all the dm room futures to complete and collect the results, collecting it into a Vec<DmRoom>
     let other_rooms = join_all(room_futures)
         .await
         .into_iter()
