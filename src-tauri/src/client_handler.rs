@@ -12,7 +12,6 @@ use matrix_sdk::encryption::CrossSigningResetAuthType;
 use matrix_sdk::authentication::oauth::registration::{ApplicationType, ClientMetadata, Localized, OAuthGrantType};
 use matrix_sdk::authentication::oauth::UrlOrQuery;
 use ruma::serde::Raw;
-use tauri::CursorIcon::Default;
 use tauri_plugin_opener::OpenerExt;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -115,6 +114,10 @@ impl ClientHandler {
         )
     }
 
+    /// Log in a user with OAuth2 authentication using their homeserver
+    ///
+    /// # Arguments
+    /// * `homeserver_url` - The URL of the homeserver to create a client for OAuth.
     async fn get_oauth_client(&self, new_homeserver: &String)-> anyhow::Result<Client> {
         let homeserver_url : Url = Url::parse(new_homeserver)?;
         let client = Client::new(homeserver_url).await?;
@@ -145,13 +148,11 @@ impl ClientHandler {
         }))
     }
 
+    /// Log in a user with OAuth2 authentication using their homeserver
     ///
-    ///
-    ///
-    ///
-    ///
-    ///
-    ///
+    /// # Arguments
+    /// * `homeserver` - The URL of the homeserver to log in to.
+    /// * `login` - If true, the user has registered already so log them in, otherwise register
     pub async fn oauth_login(
         &self,
         homeserver: String,
@@ -177,9 +178,9 @@ impl ClientHandler {
             // oauth.restore_registered_client()
         }
 
-        // If the user hasn't registered
+        // If the user hasn't registered, we register them
         else {
-            // Empty vector because we have no language tags currently, client url is meant to be client home page,  but is informational
+            // Setup client metadata
             let url = Url::parse("https://github.com/flaxeneel2/echelon/")?;
             let new_client_url = Localized::new(url, Vec::new());
             let grant_types : Vec<OAuthGrantType> = vec![
@@ -192,38 +193,43 @@ impl ClientHandler {
             let raw_client_metadata = Raw::new(&client_metadata)?;
             oauth.register_client(&raw_client_metadata).await?;
         }
-        // Has 4 parameters, first one is explained above, second is Device ID if None then it randomizes,
-        // third explained above, last is additional_scopes
+        // Build authorization data and login, then build the OAuthAuthCodeUrlBuilder
         let auth_data = oauth.login(redirect_uri.clone(), None, None, None).build().await?;
         let redirect_url = auth_data.url;
         self.app_handle.opener().open_url(redirect_url, None::<&str>)?;
 
-        // Wait for response
+        // Wait for a response from the homeserver and create an input buffer for the GET request
         match listener.accept().await {
             Ok((mut stream, addr)) => {
                 println!("new client: {:?}", addr);
                 let mut buffer = vec![0u8; 1024];
                 let n = stream.read(&mut buffer).await?;
                 let request = String::from_utf8_lossy(&buffer[..n]);
-
+                
+                // Parse the GET request to only get the header and format it according to how
+                // finish_login() requires it
                 let request_string : String = request.parse()?;
                 if let Some(header_string)=request_string.lines().next() {
                     let split_header : Vec<&str> = header_string.split(' ').collect();
                     let get_request = split_header.get(1)
                         .ok_or_else(|| anyhow::anyhow!("Malformed HTTP request"))?;
                     let result_url = redirect_uri.join(get_request)?;
-
+                    
+                    // Completes login, which checks the csrf token internally
                     oauth.finish_login(UrlOrQuery::Url(result_url)).await?;
 
-                    let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n\
-                        <link rel=\"icon\" href=\"data:,\">
-                        <html><body>\
-                        <h2>Login successful!</h2>\
-                        <p>You can close this tab and return to Echelon.</p>\
-                        </body></html>";
+                    // Return a response to the user
+                    let response = 
+                        r#"HTTP/1.1 200 OKContent-Type: text/html
+                        <link rel="icon" href="data:,">
+                        <html><body>
+                        <h2>Login successful!</h2>
+                        <p>You can close this tab and return to Echelon.</p>
+                        </body></html>"#;
                     stream.write_all(response.as_bytes()).await?;
                     stream.flush().await?;
-
+                    
+                    // TODO remove this once we have stronghold setup, this is only for testing purposes with dummy accounts
                     debug!("OAuth login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
 
                     ClientEvents::register_events(&new_client, self.app_handle.clone());
