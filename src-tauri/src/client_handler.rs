@@ -118,7 +118,6 @@ impl ClientHandler {
         new_client.matrix_auth()
             .login_username(&username, &password)
             .initial_device_display_name("Echelon")
-            .device_id("echelon-device")
             .send().await?;
 
         debug!("Login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));

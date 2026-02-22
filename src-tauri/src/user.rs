@@ -299,7 +299,7 @@ pub async fn get_space_tree(
     let mut child_to_parent: HashMap<String, String> = HashMap::new();
     let mut id_to_name: HashMap<String, String> = HashMap::new();
 
-    for room_summary in &response.rooms {
+    for room_summary in response.rooms.iter().skip(1) {
         let room_id = room_summary.summary.room_id.to_string();
         let name = room_summary.summary.name.clone();
         let topic = room_summary.summary.topic.clone();
