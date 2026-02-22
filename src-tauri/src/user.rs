@@ -1,7 +1,16 @@
+use std::collections::HashMap;
+use futures_util::future::join_all;
+use matrix_sdk::{Client, RoomMemberships};
+use ruma::{OwnedRoomId};
+use ruma::api::client::space::get_hierarchy;
+use ruma::events::direct::{OwnedDirectUserIdentifier};
+use ruma::events::{AnyGlobalAccountDataEvent, GlobalAccountDataEventType, StateEventType};
 use crate::ClientState;
 use tauri::State;
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 use crate::account::account_reset_types::AccountResetType;
+use crate::rooms::room_types::{DmRoom, RawRoom, SpaceRoom};
+use crate::spaces::raw_space::{RawSpace};
 
 #[tauri::command]
 pub async fn register(
@@ -135,6 +144,7 @@ pub async fn restore_session(
     }
 }
 
+
 #[tauri::command]
 pub async fn reset_account(
     account_reset_type: AccountResetType,
@@ -153,4 +163,303 @@ pub async fn reset_account(
         Ok(_) => Ok("account reset successful".into()),
         Err(e) => Err(format!("Account reset failed: {}", e))
     }
+}
+
+#[tauri::command]
+pub async fn get_spaces(
+    state: State<'_, ClientState>
+) -> Result<Vec<SpaceRoom>, String> {
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        client_handler.get_client().joined_space_rooms().into_iter().map(|room| {
+            let room_id = room.room_id().to_string();
+            let name = room.name();
+            let topic = room.topic();
+            let avatar_url = room.avatar_url().map(|m| m.to_string());
+            SpaceRoom {
+                base: RawRoom {
+                    id: room_id,
+                    name,
+                    topic,
+                    avatar_url,
+                    is_space: room.is_space(),
+                },
+                parent_spaces: Vec::new(), // Root spaces have no parents
+            }
+        }).collect::<Vec<SpaceRoom>>()
+    };
+    Ok(result)
+}
+
+#[tauri::command]
+#[deprecated(note = "I don't see why this needs to exist anymore, get_all_spaces_with_trees should cover all the same use cases and more. This function will be removed soon after i discuss w/ others")]
+pub async fn get_rooms(
+    state: State<'_, ClientState>
+) -> Result<Vec<RawRoom>, String> {
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        let rooms = client_handler.get_client().joined_rooms();
+        let mut room_infos = Vec::new();
+        for room in rooms {
+            let room_id = room.room_id().to_string();
+            let name = room.name();
+            let topic = room.topic();
+            let avatar_url = room.avatar_url().map(|m| m.to_string());
+
+            room_infos.push(
+                RawRoom {
+                    id: room_id,
+                    name,
+                    topic,
+                    avatar_url,
+                    is_space: room.is_space(),
+                }
+            )
+        }
+        room_infos
+    };
+    Ok(result)
+}
+
+
+/// This is relatively expensive, as it fetches the entire hierarchy for each space, but it is useful
+/// for the initial load of the app to get all spaces and their parent relationships in one call.
+/// For more dynamic use cases, it's better to call get_space_tree for a specific space when needed.
+#[tauri::command]
+pub async fn get_all_spaces_with_trees(
+    state: State<'_, ClientState>
+) -> Result<HashMap<String, RawSpace>, String> {
+    let state_r = state.0.read().await;
+    let client_handler = state_r.as_ref().unwrap();
+    let client = client_handler.get_client();
+
+
+    let tasks = client.joined_space_rooms().into_iter().map(|space| {
+        let space_id = space.room_id().to_string();
+        let state_clone = state.clone();
+        async move {
+            match get_space_tree(space_id.clone(), state_clone).await {
+                Ok(tree) => {
+                    Some(RawSpace {
+                        raw_room: RawRoom {
+                            id: space_id,
+                            name: space.name(),
+                            topic: space.topic(),
+                            avatar_url: space.avatar_url().map(|m| m.to_string()),
+                            is_space: space.is_space(),
+                        },
+                        rooms: tree,
+                    })
+                },
+                Err(e) => {
+                    debug!("Failed to get tree for space {}: {}", space_id, e);
+                    None
+                },
+            }
+        }
+    });
+    let results = join_all(tasks).await;
+
+    let mut root_map: HashMap<String, RawSpace> = HashMap::new();
+
+    for res in results {
+        match res {
+            Some(raw_space) => {
+                root_map.insert(raw_space.raw_room.id.clone(), raw_space);
+            },
+            None => continue,
+        }
+    }
+
+    Ok(root_map)
+}
+
+#[tauri::command]
+pub async fn get_space_tree(
+    space_id: String,
+    state: State<'_, ClientState>
+) -> Result<Vec<SpaceRoom>, String> {
+    let state_r = state.0.read().await;
+    let client_handler = state_r.as_ref().unwrap();
+    let client = client_handler.get_client();
+    let space_room_id = OwnedRoomId::try_from(space_id).map_err(|e| e.to_string())?;
+    let room = client.get_room(&*space_room_id);
+
+    let Some(room) = room else {
+        return Err("Space not found".to_string());
+    };
+    if !room.is_space() {
+        return Err("Given space ID does not correspond to a space room".to_string());
+    }
+
+    let request = get_hierarchy::v1::Request::new(space_room_id.clone());
+    let response: get_hierarchy::v1::Response = client.send(request).await.map_err(|e| e.to_string())?;
+
+    debug!("Space hierarchy returned {} rooms", response.rooms.len());
+
+    let mut raw_rooms: Vec<RawRoom> = Vec::new();
+    let mut child_to_parent: HashMap<String, String> = HashMap::new();
+    let mut id_to_name: HashMap<String, String> = HashMap::new();
+
+    for room_summary in response.rooms.iter().skip(1) {
+        let room_id = room_summary.summary.room_id.to_string();
+        let name = room_summary.summary.name.clone();
+        let is_space = client.get_room(&*room_summary.summary.room_id).map(|r| r.is_space()).unwrap_or(false);
+        let topic = room_summary.summary.topic.clone();
+        let avatar_url = room_summary.summary.avatar_url.as_ref().map(|u| u.to_string());
+
+        id_to_name.insert(room_id.clone(), name.clone().unwrap_or_else(|| "Unnamed".to_string()));
+
+        for child_state in &room_summary.children_state {
+            if let Ok(deserialized) = child_state.deserialize() {
+                let child_id = deserialized.state_key.to_string();
+                // This room is the parent of child_id
+                child_to_parent.insert(child_id.clone(), room_id.clone());
+            }
+        }
+
+        debug!("  Child: {:?} ({})", name, room_id);
+
+        raw_rooms.push(RawRoom { id: room_id, name, topic, avatar_url, is_space });
+    }
+
+    let build_parent_path = |start_id: &str| -> Vec<String> {
+        let mut path: Vec<String> = Vec::new();
+        let mut current = start_id.to_string();
+        let mut visited = std::collections::HashSet::new();
+        while let Some(parent_id) = child_to_parent.get(&current) {
+            if visited.contains(parent_id) {
+                break; // cycle guard
+            }
+            visited.insert(parent_id.clone());
+            path.push(id_to_name.get(parent_id).cloned().unwrap_or_else(|| parent_id.clone()));
+            current = parent_id.clone();
+        }
+        path.reverse();
+        path
+    };
+
+    let mut rooms: Vec<SpaceRoom> = Vec::new();
+    for raw in raw_rooms {
+        let parent_spaces = build_parent_path(&raw.id);
+
+        rooms.push(SpaceRoom {
+            base: RawRoom {
+                id: raw.id,
+                name: raw.name,
+                topic: raw.topic,
+                avatar_url: raw.avatar_url,
+                is_space: raw.is_space,
+            },
+            parent_spaces,
+        });
+    }
+
+    Ok(rooms)
+}
+
+#[tauri::command]
+pub async fn get_dm_rooms(
+    state: State<'_, ClientState>
+) -> Result<Vec<DmRoom>, String> {
+    let state_r = state.0.read().await;
+    let client_handler = state_r.as_ref().unwrap();
+    let client = client_handler.get_client();
+    let mut dm_rooms: Vec<DmRoom> = Vec::new();
+
+    let direct_rooms = client
+        .state_store()
+        .get_account_data_event(GlobalAccountDataEventType::Direct)
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some(direct_rooms) = direct_rooms {
+        if let Ok(deserialized) = direct_rooms.deserialize() {
+           match deserialized {
+                AnyGlobalAccountDataEvent::Direct(direct_data) => {
+                    let mut dm_room_user_map: HashMap<OwnedRoomId, Vec<OwnedDirectUserIdentifier>> = HashMap::new();
+                    for (user_id, room_ids) in direct_data.content {
+                        for room_id in room_ids {
+                            dm_room_user_map.entry(room_id).or_insert_with(Vec::new).push(user_id.clone());
+                        }
+                    }
+                    for (room_id, user_ids) in dm_room_user_map {
+                        if let Some(room) = client.get_room(&room_id) {
+                            let name = room.name();
+                            let topic = room.topic();
+                            let avatar_url = room.avatar_url().map(|u| u.to_string());
+                            dm_rooms.push(DmRoom {
+                                base: RawRoom {
+                                    id: room_id.to_string(),
+                                    name,
+                                    topic,
+                                    avatar_url,
+                                    is_space: false,
+                                },
+                                members: user_ids.into_iter().map(|u| u.to_string()).collect(),
+                            });
+                        }
+                    }
+                }
+                _ => error!("Unexpected account data event type, how"),
+            }
+        } else {
+            error!("Failed to deserialize direct rooms data")
+        }
+    } else {
+        error!("No direct message rooms found")
+    }
+    let mut other_rooms = get_orphaned_rooms(client).await?;
+    dm_rooms.append(&mut other_rooms);
+
+    Ok(dm_rooms)
+}
+
+async fn get_orphaned_rooms(client: &Client) -> Result<Vec<DmRoom>, String> {
+    let non_space_rooms = client
+        .joined_rooms()
+        .into_iter()
+        .filter(|room| !room.is_space());
+
+    let mut room_futures = Vec::new();
+
+    for room in non_space_rooms {
+        room_futures.push(async move {
+            // Exclude rooms that have a parent space via m.space.parent state events
+            let has_parent_space = room
+                .get_state_events(StateEventType::SpaceParent)
+                .await
+                .map(|events| !events.is_empty())
+                .unwrap_or(false);
+
+            if has_parent_space {
+                return None;
+            }
+
+            let room_id = room.room_id().to_string();
+            let name = room.name();
+            let topic = room.topic();
+            let avatar_url = room.avatar_url().map(|u| u.to_string());
+            let members = room
+                .members(RoomMemberships::all())
+                .await
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|u| u.display_name().map(|n| n.to_string()))
+                .collect();
+            Some(DmRoom {
+                base: RawRoom { id: room_id, name, topic, avatar_url, is_space: false },
+                members,
+            })
+        });
+    }
+
+    let other_rooms = join_all(room_futures)
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
+
+    Ok(other_rooms)
 }
