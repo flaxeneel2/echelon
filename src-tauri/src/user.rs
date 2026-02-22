@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use futures_util::future::join_all;
+use matrix_sdk::{Client, RoomMemberships};
 use ruma::{OwnedRoomId};
 use ruma::api::client::space::get_hierarchy;
 use ruma::events::direct::{OwnedDirectUserIdentifier};
-use ruma::events::{AnyGlobalAccountDataEvent, GlobalAccountDataEventType};
+use ruma::events::{AnyGlobalAccountDataEvent, GlobalAccountDataEventType, StateEventType};
 use crate::ClientState;
 use tauri::State;
-use tracing::{debug, trace};
+use tracing::{debug, error, trace};
 use crate::account::account_reset_types::AccountResetType;
 use crate::rooms::room_types::{DmRoom, RawRoom, SpaceRoom};
 use crate::spaces::raw_space::{RawSpace};
@@ -182,6 +183,7 @@ pub async fn get_spaces(
                     name,
                     topic,
                     avatar_url,
+                    is_space: room.is_space(),
                 },
                 parent_spaces: Vec::new(), // Root spaces have no parents
             }
@@ -212,6 +214,7 @@ pub async fn get_rooms(
                     name,
                     topic,
                     avatar_url,
+                    is_space: room.is_space(),
                 }
             )
         }
@@ -245,6 +248,7 @@ pub async fn get_all_spaces_with_trees(
                             name: space.name(),
                             topic: space.topic(),
                             avatar_url: space.avatar_url().map(|m| m.to_string()),
+                            is_space: space.is_space(),
                         },
                         rooms: tree,
                     })
@@ -302,6 +306,7 @@ pub async fn get_space_tree(
     for room_summary in response.rooms.iter().skip(1) {
         let room_id = room_summary.summary.room_id.to_string();
         let name = room_summary.summary.name.clone();
+        let is_space = client.get_room(&*room_summary.summary.room_id).map(|r| r.is_space()).unwrap_or(false);
         let topic = room_summary.summary.topic.clone();
         let avatar_url = room_summary.summary.avatar_url.as_ref().map(|u| u.to_string());
 
@@ -317,7 +322,7 @@ pub async fn get_space_tree(
 
         debug!("  Child: {:?} ({})", name, room_id);
 
-        raw_rooms.push(RawRoom { id: room_id, name, topic, avatar_url });
+        raw_rooms.push(RawRoom { id: room_id, name, topic, avatar_url, is_space });
     }
 
     let build_parent_path = |start_id: &str| -> Vec<String> {
@@ -346,6 +351,7 @@ pub async fn get_space_tree(
                 name: raw.name,
                 topic: raw.topic,
                 avatar_url: raw.avatar_url,
+                is_space: raw.is_space,
             },
             parent_spaces,
         });
@@ -389,19 +395,71 @@ pub async fn get_dm_rooms(
                                     name,
                                     topic,
                                     avatar_url,
+                                    is_space: false,
                                 },
                                 members: user_ids.into_iter().map(|u| u.to_string()).collect(),
                             });
                         }
                     }
-                    Ok(dm_rooms)
                 }
-                _ => Err("Unexpected account data event type, how".to_string()),
+                _ => error!("Unexpected account data event type, how"),
             }
         } else {
-            Err("Failed to deserialize direct rooms data".to_string())
+            error!("Failed to deserialize direct rooms data")
         }
     } else {
-        Err("No direct message rooms found".to_string())
+        error!("No direct message rooms found")
     }
+    let mut other_rooms = get_orphaned_rooms(client).await?;
+    dm_rooms.append(&mut other_rooms);
+
+    Ok(dm_rooms)
+}
+
+async fn get_orphaned_rooms(client: &Client) -> Result<Vec<DmRoom>, String> {
+    let non_space_rooms = client
+        .joined_rooms()
+        .into_iter()
+        .filter(|room| !room.is_space());
+
+    let mut room_futures = Vec::new();
+
+    for room in non_space_rooms {
+        room_futures.push(async move {
+            // Exclude rooms that have a parent space via m.space.parent state events
+            let has_parent_space = room
+                .get_state_events(StateEventType::SpaceParent)
+                .await
+                .map(|events| !events.is_empty())
+                .unwrap_or(false);
+
+            if has_parent_space {
+                return None;
+            }
+
+            let room_id = room.room_id().to_string();
+            let name = room.name();
+            let topic = room.topic();
+            let avatar_url = room.avatar_url().map(|u| u.to_string());
+            let members = room
+                .members(RoomMemberships::all())
+                .await
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|u| u.display_name().map(|n| n.to_string()))
+                .collect();
+            Some(DmRoom {
+                base: RawRoom { id: room_id, name, topic, avatar_url, is_space: false },
+                members,
+            })
+        });
+    }
+
+    let other_rooms = join_all(room_futures)
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
+
+    Ok(other_rooms)
 }

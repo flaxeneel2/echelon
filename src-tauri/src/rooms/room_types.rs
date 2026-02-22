@@ -5,7 +5,8 @@ pub struct RawRoom {
     pub id: String,
     pub name: Option<String>,
     pub topic: Option<String>,
-    pub avatar_url: Option<String>
+    pub avatar_url: Option<String>,
+    pub is_space: bool
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
