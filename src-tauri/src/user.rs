@@ -549,7 +549,7 @@ pub async fn get_dm_rooms(
         .get_account_data_event(GlobalAccountDataEventType::Direct)
         .await
         .map_err(|e| e.to_string())?;
-    // try unwrap the direct rooms we got back
+    // try to unwrap the direct rooms we got back
     if let Some(direct_rooms) = direct_rooms {
         // try deserializing it
         if let Ok(deserialized) = direct_rooms.deserialize() {

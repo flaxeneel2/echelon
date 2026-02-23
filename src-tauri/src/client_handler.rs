@@ -11,10 +11,9 @@ use matrix_sdk::authentication::matrix::MatrixSession;
 use matrix_sdk::encryption::CrossSigningResetAuthType;
 use matrix_sdk::authentication::oauth::registration::{ApplicationType, ClientMetadata, Localized, OAuthGrantType};
 use matrix_sdk::authentication::oauth::UrlOrQuery;
+use matrix_sdk::utils::local_server::LocalServerBuilder;
 use ruma::serde::Raw;
 use tauri_plugin_opener::OpenerExt;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
 
 pub struct ClientHandler {
     matrix_client: Client,
@@ -165,11 +164,8 @@ impl ClientHandler {
         // If it fails, it throws an exception to user.rs::oauth_login which passes it to front-end
         oauth.server_metadata().await?;
 
-        // Make a listener to listen on a random port decided by the OS, so no Race Conditions occur when picking a port
-        // Create the redirect URI
-        let listener : TcpListener = TcpListener::bind("127.0.0.1:0").await?;
-        let port= listener.local_addr()?.port();
-        let redirect_uri : Url= Url::parse(&format!("http://127.0.0.1:{}/oauth/callback", port))?;
+        // Make a listener to listen on a random port to receive the GET request
+        let (redirect_uri, redirect_handle)  = LocalServerBuilder::new().spawn().await?;
 
         // If user has registered and is logging in
         if login {
@@ -186,64 +182,33 @@ impl ClientHandler {
                 OAuthGrantType::AuthorizationCode {
                     redirect_uris: vec![redirect_uri.clone()],
                 } ,
-                OAuthGrantType::DeviceCode];
-
+                OAuthGrantType::DeviceCode
+            ];
             let client_metadata = ClientMetadata::new(ApplicationType::Native, grant_types, new_client_url);
             let raw_client_metadata = Raw::new(&client_metadata)?;
             oauth.register_client(&raw_client_metadata).await?;
         }
         // Build authorization data and login, then build the OAuthAuthCodeUrlBuilder
         let auth_data = oauth.login(redirect_uri.clone(), None, None, None).build().await?;
-        let redirect_url = auth_data.url;
-        self.app_handle.opener().open_url(redirect_url, None::<&str>)?;
+        self.app_handle.opener().open_url(auth_data.url, None::<&str>)?;
 
-        // Wait for a response from the homeserver and create an input buffer for the GET request
-        match listener.accept().await {
-            Ok((mut stream, addr)) => {
-                println!("new client: {:?}", addr);
-                let mut buffer = vec![0u8; 1024];
-                let n = stream.read(&mut buffer).await?;
-                let request = String::from_utf8_lossy(&buffer[..n]);
-                
-                // Parse the GET request to only get the header and format it according to how
-                // finish_login() requires it
-                let request_string : String = request.parse()?;
-                if let Some(header_string)=request_string.lines().next() {
-                    let split_header : Vec<&str> = header_string.split(' ').collect();
-                    let get_request = split_header.get(1)
-                        .ok_or_else(|| anyhow::anyhow!("Malformed HTTP request"))?;
-                    let result_url = redirect_uri.join(get_request)?;
+        // Wait for redirect
+        let query = redirect_handle.await
+            .ok_or_else(|| anyhow::anyhow!("OAuth redirect was cancelled or timed out"))?;
+
+        // Finish Login, the SDK verifies the csrf token internally
+        oauth.finish_login(UrlOrQuery::Query(query.to_string())).await?;
                     
-                    // Completes login, which checks the csrf token internally
-                    oauth.finish_login(UrlOrQuery::Url(result_url)).await?;
+        // TODO remove this once we have stronghold setup, this is only for testing purposes with dummy accounts
+        debug!("OAuth login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
 
-                    // Return a response to the user
-                    let response = 
-                        r#"HTTP/1.1 200 OKContent-Type: text/html
-                        <link rel="icon" href="data:,">
-                        <html><body>
-                        <h2>Login successful!</h2>
-                        <p>You can close this tab and return to Echelon.</p>
-                        </body></html>"#;
-                    stream.write_all(response.as_bytes()).await?;
-                    stream.flush().await?;
-                    
-                    // TODO remove this once we have stronghold setup, this is only for testing purposes with dummy accounts
-                    debug!("OAuth login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
+        ClientEvents::register_events(&new_client, self.app_handle.clone());
 
-                    ClientEvents::register_events(&new_client, self.app_handle.clone());
-
-                    return Ok(Some(ClientHandler {
-                        matrix_client: new_client,
-                        sync_manager: SyncManager::new(),
-                        app_handle: self.app_handle.clone(),
-                    }));
-                }
-            },
-            Err(e) => println!("couldn't get client: {:?}", e),
-        };
-
-        Err(anyhow::anyhow!("OAuth login failed: no valid redirect received"))
+        Ok(Some(ClientHandler {
+            matrix_client: new_client,
+            sync_manager: SyncManager::new(),
+            app_handle: self.app_handle.clone(),
+        }))
     }
 
     pub async fn restore_session(&self, username: String, homeserver: String) -> anyhow::Result<Option<ClientHandler>> {

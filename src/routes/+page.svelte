@@ -250,11 +250,6 @@
     border-color: #2563eb;
   }
 
-  .oauth-icon {
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-  }
 
   button:hover:not(:disabled) {
     background-color: #1d4ed8;

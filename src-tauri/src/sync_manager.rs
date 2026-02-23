@@ -23,7 +23,7 @@ impl SyncManager {
         let sync_settings = SyncSettings::default();
 
         let initial_response = client.sync_once(sync_settings.clone().full_state(true)).await.expect("failed to perform initial sync");
-        let mut next_batch = initial_response.next_batch;
+        let next_batch = initial_response.next_batch;
 
         let handle = tokio::spawn(async move {
             debug!("Starting Matrix sync loop...");
