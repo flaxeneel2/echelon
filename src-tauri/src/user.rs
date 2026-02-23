@@ -12,6 +12,85 @@ use crate::account::account_reset_types::AccountResetType;
 use crate::rooms::room_types::{DmRoom, RawRoom, SpaceRoom};
 use crate::spaces::raw_space::{RawSpace};
 
+/// Log in a user with OAuth2 authentication using their homeserver
+///
+/// # Arguments
+/// * `homeserver` - The URL of the homeserver to log in to.
+/// * `state` - The client state containing the Matrix client to perform the login on.
+#[tauri::command]
+pub async fn oauth_login(
+    homeserver: String,
+    state: State<'_, ClientState>,
+) -> Result<String, String> {
+    trace!("Starting OAuth login for homeserver: {}", homeserver);
+    if homeserver.trim().is_empty() {
+        return Err("homeserver is required".to_string());
+    }
+
+    // Call oauth_login in a separate scope to drop the read lock
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        client_handler.oauth_login(homeserver, true).await
+    };
+
+    match result {
+        Ok(Some(handler)) => {
+            // Get the client before storing the handler
+            let client = handler.get_client().clone();
+
+            // Start the sync task
+            handler.sync_manager.start_sync(client).await;
+
+            // Now acquire write lock - read lock has been dropped
+            let mut write_guard = state.0.write().await;
+            *write_guard = Some(handler);
+            Ok("oauth login successful".into())
+        },
+        Ok(None) => Err("OAuth login failed: no handler returned".into()),
+        Err(e) => Err(format!("OAuth login failed: {}", e)),
+    }
+}
+
+/// Register a user with OAuth2 authentication using their homeserver
+///
+/// # Arguments
+/// * `homeserver` - The URL of the homeserver to register with.
+/// * `state` - The client state containing the Matrix client to perform the login on.
+#[tauri::command]
+pub async fn oauth_register(
+    homeserver: String,
+    state: State<'_, ClientState>,
+) -> Result<String, String> {
+    trace!("Starting OAuth register for homeserver: {}", homeserver);
+    if homeserver.trim().is_empty() {
+        return Err("homeserver is required".to_string());
+    }
+
+    // Call oauth_login in a separate scope to drop the read lock
+    let result = {
+        let state_r = state.0.read().await;
+        let client_handler = state_r.as_ref().unwrap();
+        client_handler.oauth_login(homeserver, false).await
+    };
+
+    match result {
+        Ok(Some(handler)) => {
+            // Get the client before storing the handler
+            let client = handler.get_client().clone();
+
+            // Start the sync task
+            handler.sync_manager.start_sync(client).await;
+
+            // Now acquire write lock - read lock has been dropped
+            let mut write_guard = state.0.write().await;
+            *write_guard = Some(handler);
+            Ok("oauth registration successful".into())
+        },
+        Ok(None) => Err("OAuth registration failed: no handler returned".into()),
+        Err(e) => Err(format!("OAuth registration failed: {}", e)),
+    }
+}
 
 /// Register a new user with the given username, password, and homeserver. Optionally takes a
 /// registration token if the homeserver requires it.
@@ -470,7 +549,7 @@ pub async fn get_dm_rooms(
         .get_account_data_event(GlobalAccountDataEventType::Direct)
         .await
         .map_err(|e| e.to_string())?;
-    // try unwrap the direct rooms we got back
+    // try to unwrap the direct rooms we got back
     if let Some(direct_rooms) = direct_rooms {
         // try deserializing it
         if let Ok(deserialized) = direct_rooms.deserialize() {

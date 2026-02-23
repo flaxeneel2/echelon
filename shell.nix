@@ -1,6 +1,9 @@
 let
 
-  rust_overlay_src = builtins.fetchTarball "https://github.com/oxalica/rust-overlay/archive/master.tar.gz";
+  rust_overlay_src = builtins.fetchTarball {
+    url = "https://github.com/oxalica/rust-overlay/archive/master.tar.gz";
+    sha256 = "0yfi6r12pap2jfbbrijx65g0clmv5gw654hlgrapr5q3qjl6panc";
+  };
 
   pkgs = import <nixpkgs> {
     overlays = [

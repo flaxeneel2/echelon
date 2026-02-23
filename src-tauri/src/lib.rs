@@ -1,7 +1,7 @@
 use tauri::Manager;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
-use crate::user::{get_rooms, get_space_tree, get_spaces, login, logout, register, reset_account, restore_session, get_all_spaces_with_trees, get_dm_rooms};
+use crate::user::{get_rooms, get_space_tree, get_spaces,login, logout, oauth_login, oauth_register, register, reset_account, restore_session, get_all_spaces_with_trees, get_dm_rooms};
 
 mod user;
 mod client_handler;
@@ -34,6 +34,8 @@ pub fn run() {
             logout,
             restore_session,
             reset_account,
+            oauth_login,
+            oauth_register,
             get_spaces,
             get_rooms,
             get_all_spaces_with_trees,
