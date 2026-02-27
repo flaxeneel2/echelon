@@ -5,7 +5,8 @@ use keyring::Entry;
 use getrandom;
 use hex;
 use iota_stronghold;
-use crate::user::{get_rooms, get_space_tree, get_spaces,login, logout, oauth_login, oauth_register, register, reset_account, restore_session, get_all_spaces_with_trees, get_dm_rooms};
+use iota_stronghold::Stronghold;
+use crate::user::{get_rooms, get_space_tree, get_spaces, login, logout, oauth_login, oauth_register, register, reset_account, restore_session, get_all_spaces_with_trees, get_dm_rooms};
 
 mod user;
 mod client_handler;
@@ -18,6 +19,7 @@ mod rooms;
 use client_handler::ClientHandler;
 
 pub struct ClientState(pub RwLock<Option<ClientHandler>>);
+pub struct StrongholdS(pub RwLock<Option<Stronghold>>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -47,23 +49,23 @@ pub fn run() {
             let kp = iota_stronghold::KeyProvider::with_passphrase_hashed_blake2b(entry.get_password().unwrap()).unwrap();
             let stronghold_dir = format!("{}/stronghold", app.handle().path().app_data_dir()?.display());
             println!("{:?}", stronghold_dir);
-            let stronghold = iota_stronghold::Stronghold::default();
+            let stronghold = Stronghold::default();
             // need to check for if snapshot file is missing
-            let snapshot = stronghold.load_snapshot(&kp, &iota_stronghold::SnapshotPath::from_path(&stronghold_dir));
+            let _snapshot = stronghold.load_snapshot(&kp, &iota_stronghold::SnapshotPath::from_path(&stronghold_dir));
             println!("{:?}", snapshot);
             // attempt to load a temporary client we called "USERNAME"
-            let mut client = stronghold.load_client("USERNAME");
-            match &client {
+            let mut stronghold_client = stronghold.load_client("USERNAME");
+            match &stronghold_client {
                 Err(iota_stronghold::ClientError::ClientDataNotPresent) => {
                     println!("client no exist :(");
-                    client = stronghold.create_client("USERNAME");
+                    stronghold_client = stronghold.create_client("USERNAME");
                 },
                 _ => {
                     println!("client USERNAME exists yippee");
                 },
             }
             // get the store within the client d try to insert values, save and then print the values inside
-            let store = client.unwrap().store();
+            let store = stronghold_client.unwrap().store();
             //store.insert(b"test1".to_vec(), b"test123".to_vec(), None);
             //stronghold.commit_with_keyprovider(&iota_stronghold::SnapshotPath::from_path(&stronghold_dir), &kp);
 
