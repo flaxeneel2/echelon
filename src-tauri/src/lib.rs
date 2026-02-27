@@ -51,7 +51,7 @@ pub fn run() {
             println!("{:?}", stronghold_dir);
             let stronghold = Stronghold::default();
             // need to check for if snapshot file is missing
-            let _snapshot = stronghold.load_snapshot(&kp, &iota_stronghold::SnapshotPath::from_path(&stronghold_dir));
+            let snapshot = stronghold.load_snapshot(&kp, &iota_stronghold::SnapshotPath::from_path(&stronghold_dir));
             println!("{:?}", snapshot);
             // attempt to load a temporary client we called "USERNAME"
             let mut stronghold_client = stronghold.load_client("USERNAME");
