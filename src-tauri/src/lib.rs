@@ -2,9 +2,10 @@ use tauri::Manager;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use crate::user::{login, logout, register, reset_account, restore_session};
-use keyring::{Entry, credential};
+use keyring::Entry;
 use getrandom;
 use hex;
+use iota_stronghold;
 
 mod user;
 mod client_handler;
@@ -39,6 +40,33 @@ pub fn run() {
                 },
                 _ => println!("Keyring password already set"),
             }
+
+            // load the key from the entry and create a new keyprovider to encrypt the stronghold
+            let kp = iota_stronghold::KeyProvider::with_passphrase_hashed_blake2b(entry.get_password().unwrap()).unwrap();
+            let stronghold_dir = format!("{}/stronghold", app.handle().path().app_data_dir()?.display());
+            println!("{:?}", stronghold_dir);
+            let stronghold = iota_stronghold::Stronghold::default();
+            // need to check for if snapshot file is missing
+            let snapshot = stronghold.load_snapshot(&kp, &iota_stronghold::SnapshotPath::from_path(&stronghold_dir));
+            println!("{:?}", snapshot);
+            // attempt to load a temporary client we called "USERNAME"
+            let mut client = stronghold.load_client("USERNAME");
+            match &client {
+                Err(iota_stronghold::ClientError::ClientDataNotPresent) => {
+                    println!("client no exist :(");
+                    client = stronghold.create_client("USERNAME");
+                },
+                _ => {
+                    println!("client USERNAME exists yippee");
+                },
+            }
+            // get the store within the client d try to insert values, save and then print the values inside
+            let store = client.unwrap().store();
+            //store.insert(b"test1".to_vec(), b"test123".to_vec(), None);
+            //stronghold.commit_with_keyprovider(&iota_stronghold::SnapshotPath::from_path(&stronghold_dir), &kp);
+
+            println!("{:?}", store.get(b"test"));
+            println!("{:?}", store.keys());
 
             app.manage(client_state);
             Ok(())

@@ -9,6 +9,7 @@ use matrix_sdk::encryption::CrossSigningResetAuthType;
 use tauri::{AppHandle, Manager, Url};
 use tracing::{debug, error};
 use crate::account::account_reset_types::AccountResetType;
+use iota_stronghold;
 
 pub struct ClientHandler {
     matrix_client: Client,
@@ -122,8 +123,9 @@ impl ClientHandler {
             .send().await?;
 
         debug!("Login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
-
         ClientEvents::register_events(&new_client, self.app_handle.clone());
+
+
         
         Ok(Some(ClientHandler {
             matrix_client: new_client,
