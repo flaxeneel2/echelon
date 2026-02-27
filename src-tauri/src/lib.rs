@@ -1,17 +1,19 @@
 use tauri::Manager;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
-use crate::user::{login, logout, register, reset_account, restore_session};
 use keyring::Entry;
 use getrandom;
 use hex;
 use iota_stronghold;
+use crate::user::{get_rooms, get_space_tree, get_spaces,login, logout, oauth_login, oauth_register, register, reset_account, restore_session, get_all_spaces_with_trees, get_dm_rooms};
 
 mod user;
 mod client_handler;
 mod events;
 mod sync_manager;
 mod account;
+mod spaces;
+mod rooms;
 
 use client_handler::ClientHandler;
 
@@ -77,6 +79,13 @@ pub fn run() {
             logout,
             restore_session,
             reset_account,
+            oauth_login,
+            oauth_register,
+            get_spaces,
+            get_rooms,
+            get_all_spaces_with_trees,
+            get_space_tree,
+            get_dm_rooms
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

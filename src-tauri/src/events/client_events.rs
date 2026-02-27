@@ -1,3 +1,4 @@
+use matrix_sdk::Room;
 use ruma::events::room::message::SyncRoomMessageEvent;
 use tauri::{AppHandle, Emitter};
 use serde::Serialize;
@@ -15,15 +16,15 @@ struct MessagePayload {
 
 impl ClientEvents {
     pub fn register_events(client: &matrix_sdk::Client, app_handle: AppHandle) {
-        client.add_event_handler(move |event: SyncRoomMessageEvent| {
+        client.add_event_handler(move |event: SyncRoomMessageEvent, room: Room| {
             let app = app_handle.clone();
             async move {
-                Self::on_message(event, app).await;
+                Self::on_message(event, room, app).await;
             }
         });
     }
 
-    async fn on_message(event: SyncRoomMessageEvent, app_handle: AppHandle) {
+    async fn on_message(event: SyncRoomMessageEvent, room: Room, app_handle: AppHandle) {
         trace!("Received message: {:?}", event);
 
         // Get the content based on event type
@@ -48,7 +49,7 @@ impl ClientEvents {
         // Extract message details
         let payload = MessagePayload {
             sender,
-            room_id: "unknown".to_string(), // Room ID not directly available in sync events
+            room_id: room.room_id().to_string(),
             body,
             event_id,
         };

@@ -1,10 +1,23 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import {invoke, type InvokeArgs} from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
 
   // this is temporary, just to let me test backend while others work on the frontend
   window.core = {}
-  window.core.invoke = invoke
+  window.core.invoke_no_timer = invoke
+  window.core.invoke = async (fn_to_invoke: string, args: InvokeArgs|undefined) => {
+    const start = performance.now(); // Start timer
+
+    try {
+      const res = await invoke(fn_to_invoke, args);
+
+      const end = performance.now(); // End timer
+      console.log(`Fetch took ${end - start} milliseconds.`);
+      console.log(`Fetched data:`, res)
+    } catch (error) {
+      console.error("Command failed:", error);
+    }
+  }
   window.core.listen = listen
 
   let username = $state("");
@@ -18,6 +31,30 @@
     loading = true;
     try {
       await invoke("login", { username, password, homeserver });
+    } catch (e) {
+      error = String(e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function OAuth_login() {
+    error="";
+    loading = true;
+    try {
+      await invoke("oauth_login", { homeserver });
+    } catch (e) {
+      error = String(e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function OAuth_register() {
+    error="";
+    loading = true;
+    try {
+      await invoke("oauth_register", { homeserver });
     } catch (e) {
       error = String(e);
     } finally {
@@ -69,8 +106,15 @@
         <p class="error">{error}</p>
       {/if}
 
-      <button type="submit" disabled={loading}>
+      <button class="submit-button" type="submit" disabled={loading}>
         {loading ? "Signing in..." : "Sign in"}
+      </button>
+      
+      <button class="oauth-button" type="button" onclick={OAuth_login} disabled={loading}>
+        <span>{loading ? "Signing in..." : "OAuth Login"}</span>
+      </button>
+      <button class="oauth-button" type="button" onclick={OAuth_register} disabled={loading}>
+        <span>{loading ? "Registering..." : "OAuth Register"}</span>
       </button>
     </form>
   </div>
@@ -169,9 +213,9 @@
     color: #444;
   }
 
-  button {
+  .submit-button {
     margin-top: 0.5rem;
-    background-color: #2563eb;
+    background-color: #003097;
     color: #fff;
     border: none;
     border-radius: 8px;
@@ -182,6 +226,30 @@
     cursor: pointer;
     transition: background-color 0.2s, opacity 0.2s;
   }
+
+  .oauth-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    background-color: #1a1a1a;
+    color: #f0f0f0;
+    font-size: 0.95rem;
+    font-weight: 500;
+    font-family: inherit;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 0.7rem;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+    width: 100%;
+  }
+
+  .oauth-button:hover {
+    background-color: #222;
+    border-color: #2563eb;
+  }
+
 
   button:hover:not(:disabled) {
     background-color: #1d4ed8;
