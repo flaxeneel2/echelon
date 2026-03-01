@@ -35,6 +35,7 @@ hex = "0.4.3"
 iota_stronghold = "2.1.0"
 futures-util = "0.3.31"
 futures-core = "0.3.31"
+blake3 = "1.8.3"
 
 [profile.dev.package.scrypt]
 opt-level = 3

@@ -1448,6 +1448,7 @@ name = "echelon"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "blake3",
  "futures-core",
  "futures-util",
  "getrandom 0.4.1",

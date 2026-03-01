@@ -15,11 +15,13 @@ mod sync_manager;
 mod account;
 mod spaces;
 mod rooms;
+mod secret;
 
 use client_handler::ClientHandler;
+use secret::SecretService;
 
 pub struct ClientState(pub RwLock<Option<ClientHandler>>);
-pub struct StrongholdS(pub RwLock<Option<Stronghold>>);
+pub struct SecretState(pub RwLock<Option<SecretService>>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -31,46 +33,48 @@ pub fn run() {
             let client = rt.block_on(ClientHandler::new(app_handle));
             let client_state = ClientState(RwLock::new(Some(client)));
 
-            // create new entry object for the stronghold key
-            let entry = Entry::new("echelon", "stronghold-key").unwrap();
 
-            // if a credential does not exist on the OS, then create one
-            match entry.get_password() {
-                Err(keyring::Error::NoEntry) => {
-                    // generate a random password in keyring
-                    let mut buf = [0u8; 32];
-                    getrandom::fill(&mut buf).expect("Failed to generate a random password for keyring");
-                    let _ = entry.set_password(&hex::encode(buf));
-                },
-                _ => println!("Keyring password already set"),
-            }
+            // // create new entry object for the stronghold key
+            // let entry = Entry::new("echelon", "stronghold-key").unwrap();
+            //
+            // // if a credential does not exist on the OS, then create one
+            // match entry.get_password() {
+            //     Err(keyring::Error::NoEntry) => {
+            //         // generate a random password in keyring
+            //         let mut buf = [0u8; 32];
+            //         getrandom::fill(&mut buf).expect("Failed to generate a random password for keyring");
+            //         let _ = entry.set_password(&hex::encode(buf));
+            //     },
+            //     _ => println!("Keyring password already set"),
+            // }
+            //
+            // // load the key from the entry and create a new keyprovider to encrypt the stronghold
+            // let kp = iota_stronghold::KeyProvider::with_passphrase_hashed_blake2b(entry.get_password().unwrap()).unwrap();
+            // let stronghold_dir = format!("{}/stronghold", app.handle().path().app_data_dir()?.display());
+            // println!("{:?}", stronghold_dir);
+            // let stronghold = Stronghold::default();
+            // // need to check for if snapshot file is missing
+            // let snapshot = stronghold.load_snapshot(&kp, &iota_stronghold::SnapshotPath::from_path(&stronghold_dir));
+            // println!("{:?}", snapshot);
+            // // attempt to load a temporary client we called "USERNAME"
+            // let mut stronghold_client = stronghold.load_client("USERNAME");
+            // match &stronghold_client {
+            //     Err(iota_stronghold::ClientError::ClientDataNotPresent) => {
+            //         println!("client no exist :(");
+            //         stronghold_client = stronghold.create_client("USERNAME");
+            //     },
+            //     _ => {
+            //         println!("client USERNAME exists yippee");
+            //     },
+            // }
+            // // get the store within the client d try to insert values, save and then print the values inside
+            // let store = stronghold_client.unwrap().store();
+            // //store.insert(b"test".to_vec(), b"test123".to_vec(), None);
+            // //stronghold.commit_with_keyprovider(&iota_stronghold::SnapshotPath::from_path(&stronghold_dir), &kp);
+            //
+            // println!("{:?}", String::from_utf8(store.get(b"test1").unwrap().expect("Could not get stored value")));
+            // println!("{:?}", String::from_utf8(store.keys().unwrap()[0].clone()));
 
-            // load the key from the entry and create a new keyprovider to encrypt the stronghold
-            let kp = iota_stronghold::KeyProvider::with_passphrase_hashed_blake2b(entry.get_password().unwrap()).unwrap();
-            let stronghold_dir = format!("{}/stronghold", app.handle().path().app_data_dir()?.display());
-            println!("{:?}", stronghold_dir);
-            let stronghold = Stronghold::default();
-            // need to check for if snapshot file is missing
-            let snapshot = stronghold.load_snapshot(&kp, &iota_stronghold::SnapshotPath::from_path(&stronghold_dir));
-            println!("{:?}", snapshot);
-            // attempt to load a temporary client we called "USERNAME"
-            let mut stronghold_client = stronghold.load_client("USERNAME");
-            match &stronghold_client {
-                Err(iota_stronghold::ClientError::ClientDataNotPresent) => {
-                    println!("client no exist :(");
-                    stronghold_client = stronghold.create_client("USERNAME");
-                },
-                _ => {
-                    println!("client USERNAME exists yippee");
-                },
-            }
-            // get the store within the client d try to insert values, save and then print the values inside
-            let store = stronghold_client.unwrap().store();
-            //store.insert(b"test".to_vec(), b"test123".to_vec(), None);
-            //stronghold.commit_with_keyprovider(&iota_stronghold::SnapshotPath::from_path(&stronghold_dir), &kp);
-
-            println!("{:?}", String::from_utf8(store.get(b"test1").unwrap().expect("Could not get stored value")));
-            println!("{:?}", String::from_utf8(store.keys().unwrap()[0].clone()));
 
             app.manage(client_state);
             Ok(())
