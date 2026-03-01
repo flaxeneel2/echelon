@@ -66,11 +66,11 @@ pub fn run() {
             }
             // get the store within the client d try to insert values, save and then print the values inside
             let store = stronghold_client.unwrap().store();
-            //store.insert(b"test1".to_vec(), b"test123".to_vec(), None);
+            //store.insert(b"test".to_vec(), b"test123".to_vec(), None);
             //stronghold.commit_with_keyprovider(&iota_stronghold::SnapshotPath::from_path(&stronghold_dir), &kp);
 
-            println!("{:?}", store.get(b"test"));
-            println!("{:?}", store.keys());
+            println!("{:?}", String::from_utf8(store.get(b"test1").unwrap().expect("Could not get stored value")));
+            println!("{:?}", String::from_utf8(store.keys().unwrap()[0].clone()));
 
             app.manage(client_state);
             Ok(())
