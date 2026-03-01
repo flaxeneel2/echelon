@@ -14,6 +14,7 @@ use matrix_sdk::authentication::oauth::UrlOrQuery;
 use matrix_sdk::utils::local_server::LocalServerBuilder;
 use ruma::serde::Raw;
 use tauri_plugin_opener::OpenerExt;
+use crate::SecretState;
 
 pub struct ClientHandler {
     matrix_client: Client,
@@ -139,6 +140,12 @@ impl ClientHandler {
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
+        let session_tokens = new_client.session_tokens().unwrap();
+        let secrets = self.app_handle.state::<SecretState>();
+        secrets.0.set_login_tokens(username.clone(), session_tokens.access_token, session_tokens.refresh_token.unwrap_or("".to_string()))?;
+
+        let login_tokens = secrets.0.get_login_tokens(username.clone())?;
+        println!("login_tokens: {:?}", login_tokens);
         Ok(Some(ClientHandler {
             matrix_client: new_client,
             sync_manager: SyncManager::new(),
