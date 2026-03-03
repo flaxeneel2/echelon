@@ -1,8 +1,8 @@
-use iota_stronghold::{KeyProvider, Stronghold, SnapshotPath, ClientError, Store};
-use keyring::{Entry, Error::NoEntry};
-use std::path::{PathBuf};
 use anyhow::Result;
 use blake3;
+use iota_stronghold::{ClientError, KeyProvider, SnapshotPath, Store, Stronghold};
+use keyring::{Entry, Error::NoEntry};
+use std::path::PathBuf;
 
 pub struct SecretService {
     keyring_service: String,
@@ -44,7 +44,7 @@ impl SecretService {
                 let mut buf = [0u8; 32];
                 getrandom::fill(&mut buf)?;
                 entry.set_password(&hex::encode(buf))?;
-            },
+            }
             Ok(_) => {
                 println!("Keyring password set")
             }
@@ -54,7 +54,9 @@ impl SecretService {
         // uncomment to delete the keyring password (for testing)
         //println!("{:?}", entry.delete_credential().unwrap());
         let keyring_password = entry.get_password()?;
-        Ok(KeyProvider::with_passphrase_hashed_blake2b(keyring_password)?)
+        Ok(KeyProvider::with_passphrase_hashed_blake2b(
+            keyring_password,
+        )?)
     }
 
     fn get_client_store(&self, username: &String, stronghold: &Stronghold) -> Result<ClientStore> {
@@ -65,13 +67,16 @@ impl SecretService {
         match snapshot {
             Ok(()) => {
                 println!("Successfully loaded snapshot");
-            },
+            }
             Err(ClientError::SnapshotFileMissing(_path)) => {
-                return Ok(ClientStore { key_provider, snapshot_path, store: None });
-            },
+                return Ok(ClientStore {
+                    key_provider,
+                    snapshot_path,
+                    store: None,
+                });
+            }
             Err(e) => return Err(e.into()),
         }
-
 
         let client = match stronghold.load_client(&username) {
             Ok(client) => {
@@ -79,30 +84,49 @@ impl SecretService {
                 client
             }
             Err(ClientError::ClientDataNotPresent) => {
-                return Ok(ClientStore { key_provider, snapshot_path, store: None });
-            },
+                return Ok(ClientStore {
+                    key_provider,
+                    snapshot_path,
+                    store: None,
+                });
+            }
             Err(e) => return Err(e.into()),
         };
 
         let store = client.store();
 
-        Ok(ClientStore { key_provider, snapshot_path, store: Option::from(store) })
+        Ok(ClientStore {
+            key_provider,
+            snapshot_path,
+            store: Option::from(store),
+        })
     }
 
     fn set_client_store(&self, username: &String, stronghold: &Stronghold) -> Result<ClientStore> {
         match self.get_client_store(&username, stronghold)? {
-            client_store @ ClientStore { store: Some(_), .. } => {
-                Ok(client_store)
-            },
-            ClientStore { key_provider, snapshot_path, store: _ } => {
+            client_store @ ClientStore { store: Some(_), .. } => Ok(client_store),
+            ClientStore {
+                key_provider,
+                snapshot_path,
+                store: _,
+            } => {
                 println!("Creating new snapshot and client store");
                 let client = stronghold.create_client(&username)?;
-                Ok(ClientStore { key_provider, snapshot_path, store: Some(client.store()) })
-            },
+                Ok(ClientStore {
+                    key_provider,
+                    snapshot_path,
+                    store: Some(client.store()),
+                })
+            }
         }
     }
 
-    pub fn set_login_tokens(&self, username: String, access_token: String, refresh_token: String) -> Result<()> {
+    pub fn set_login_tokens(
+        &self,
+        username: String,
+        access_token: String,
+        refresh_token: String,
+    ) -> Result<()> {
         let stronghold = Stronghold::default();
         let client_store = self.set_client_store(&username, &stronghold)?;
         let store = client_store.store.unwrap();
@@ -119,15 +143,21 @@ impl SecretService {
     pub fn get_login_tokens(&self, username: String) -> Result<Option<(String, String)>> {
         let stronghold = Stronghold::default();
         match self.get_client_store(&username, &stronghold)? {
-            ClientStore { store: Some(store), .. } => {
-                let Some(access) = store.get(b"access_token")? else {return Ok(None);};
-                let Some(refresh) = store.get(b"refresh_token")? else {return Ok(None);};
+            ClientStore {
+                store: Some(store), ..
+            } => {
+                let Some(access) = store.get(b"access_token")? else {
+                    return Ok(None);
+                };
+                let Some(refresh) = store.get(b"refresh_token")? else {
+                    return Ok(None);
+                };
                 let access_token = String::from_utf8(access)?;
                 let refresh_token = String::from_utf8(refresh)?;
 
                 Ok(Some((access_token, refresh_token)))
-            },
-            ClientStore { store: _, .. } => { Ok(None) }
+            }
+            ClientStore { store: _, .. } => Ok(None),
         }
     }
 }

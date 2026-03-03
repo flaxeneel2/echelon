@@ -1,20 +1,28 @@
-use std::path::Path;
-use tauri::{AppHandle, Manager, Url};
-use tracing::{debug, error};
+use crate::account::account_reset_types::AccountResetType;
 use crate::events::client_events::ClientEvents;
 use crate::sync_manager::SyncManager;
-use crate::account::account_reset_types::AccountResetType;
-use ruma::api::client::uiaa::{AuthData, Password, RegistrationToken, UserIdentifier};
-use ruma::{OwnedDeviceId, OwnedUserId};
-use matrix_sdk::{ruma::api::client::account::register::v3::Request as RegistrationRequest, AuthSession, Client, SessionMeta, SessionTokens};
-use matrix_sdk::authentication::matrix::MatrixSession;
-use matrix_sdk::encryption::CrossSigningResetAuthType;
-use matrix_sdk::authentication::oauth::registration::{ApplicationType, ClientMetadata, Localized, OAuthGrantType};
-use matrix_sdk::authentication::oauth::UrlOrQuery;
-use matrix_sdk::utils::local_server::LocalServerBuilder;
-use ruma::serde::Raw;
-use tauri_plugin_opener::OpenerExt;
 use crate::SecretState;
+use crate::Accounts;
+use matrix_sdk::authentication::matrix::MatrixSession;
+use matrix_sdk::authentication::oauth::registration::{
+    ApplicationType, ClientMetadata, Localized, OAuthGrantType,
+};
+use matrix_sdk::authentication::oauth::UrlOrQuery;
+use matrix_sdk::encryption::CrossSigningResetAuthType;
+use matrix_sdk::utils::local_server::LocalServerBuilder;
+use matrix_sdk::{
+    ruma::api::client::account::register::v3::Request as RegistrationRequest, AuthSession, Client,
+    SessionMeta, SessionTokens,
+};
+use ruma::api::client::uiaa::{AuthData, Password, RegistrationToken, UserIdentifier};
+use ruma::serde::Raw;
+use ruma::{OwnedDeviceId, OwnedUserId};
+use std::path::Path;
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager, Url};
+use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_store::StoreExt;
+use tracing::{debug, error};
 
 pub struct ClientHandler {
     matrix_client: Client,
@@ -25,7 +33,9 @@ pub struct ClientHandler {
 impl ClientHandler {
     pub async fn new(app_handle: AppHandle) -> Self {
         ClientHandler {
-            matrix_client: Client::new("https://matrix.org".parse().unwrap()).await.expect("Failed to create Matrix client"),
+            matrix_client: Client::new("https://matrix.org".parse().unwrap())
+                .await
+                .expect("Failed to create Matrix client"),
             sync_manager: SyncManager::new(),
             app_handle,
         }
@@ -40,7 +50,7 @@ impl ClientHandler {
         username: String,
         password: String,
         homeserver: String,
-        registration_token: Option<String>
+        registration_token: Option<String>,
     ) -> anyhow::Result<ClientHandler> {
         let client: Client = self.get_new_client(&username, &homeserver).await?;
 
@@ -48,9 +58,8 @@ impl ClientHandler {
         registration_request.username = Some(username.clone());
         registration_request.password = Some(password.clone());
         if let Some(token) = registration_token.clone() {
-            registration_request.auth = Some(AuthData::RegistrationToken(
-                RegistrationToken::new(token)
-            ));
+            registration_request.auth =
+                Some(AuthData::RegistrationToken(RegistrationToken::new(token)));
         }
 
         let auth = client.matrix_auth();
@@ -58,15 +67,16 @@ impl ClientHandler {
         let reg_builder = auth.register(registration_request.clone());
         match reg_builder.await {
             Ok(res) => {
-                debug!("Registration worked immediately (no challenge-response), ID is {}", res.user_id);
-                Ok(
-                    ClientHandler {
-                        matrix_client: client,
-                        sync_manager: SyncManager::new(),
-                        app_handle: self.app_handle.clone(),
-                    }
-                )
-            },
+                debug!(
+                    "Registration worked immediately (no challenge-response), ID is {}",
+                    res.user_id
+                );
+                Ok(ClientHandler {
+                    matrix_client: client,
+                    sync_manager: SyncManager::new(),
+                    app_handle: self.app_handle.clone(),
+                })
+            }
             Err(e) => {
                 debug!("Registration failed, trying challenge-response");
                 if let Some(uiaa_info) = e.as_uiaa_response() {
@@ -75,25 +85,27 @@ impl ClientHandler {
 
                     let mut reg_token = RegistrationToken::new(registration_token.unwrap());
                     reg_token.session = session;
-                    let auth_data = AuthData::RegistrationToken(
-                        reg_token
-                    );
+                    let auth_data = AuthData::RegistrationToken(reg_token);
                     registration_request.auth = Some(auth_data);
                     let final_response = client.matrix_auth().register(registration_request).await;
                     match final_response {
                         Ok(res) => {
-                            debug!("Registration successful after challenge-response, ID is {}", res.user_id);
-                            Ok(
-                                ClientHandler {
-                                    matrix_client: client,
-                                    sync_manager: SyncManager::new(),
-                                    app_handle: self.app_handle.clone(),
-                                }
-                            )
-                        },
+                            debug!(
+                                "Registration successful after challenge-response, ID is {}",
+                                res.user_id
+                            );
+                            Ok(ClientHandler {
+                                matrix_client: client,
+                                sync_manager: SyncManager::new(),
+                                app_handle: self.app_handle.clone(),
+                            })
+                        }
                         Err(e) => {
                             error!("Registration failed after challenge-response: {:?}", e);
-                            Err(anyhow::anyhow!("Registration failed after challenge-response: {:?}", e))
+                            Err(anyhow::anyhow!(
+                                "Registration failed after challenge-response: {:?}",
+                                e
+                            ))
                         }
                     }
                 } else {
@@ -104,22 +116,34 @@ impl ClientHandler {
         }
     }
 
-    async fn get_new_client(&self, username: &String, new_homeserver: &String) -> anyhow::Result<Client> {
-        Ok(
-            Client::builder()
-                .homeserver_url(new_homeserver)
-                .sqlite_store(Path::join(&self.app_handle.path().app_data_dir()?, format!("{}_{}_data", username, Url::parse(new_homeserver)?.domain().unwrap())), None)
-                .build()
-                .await?
-        )
+    async fn get_new_client(
+        &self,
+        username: &String,
+        new_homeserver: &String,
+    ) -> anyhow::Result<Client> {
+        Ok(Client::builder()
+            .homeserver_url(new_homeserver)
+            .sqlite_store(
+                Path::join(
+                    &self.app_handle.path().app_data_dir()?,
+                    format!(
+                        "{}_{}_data",
+                        username,
+                        Url::parse(new_homeserver)?.domain().unwrap()
+                    ),
+                ),
+                None,
+            )
+            .build()
+            .await?)
     }
 
     /// Log in a user with OAuth2 authentication using their homeserver
     ///
     /// # Arguments
     /// * `homeserver_url` - The URL of the homeserver to create a client for OAuth.
-    async fn get_oauth_client(&self, new_homeserver: &String)-> anyhow::Result<Client> {
-        let homeserver_url : Url = Url::parse(new_homeserver)?;
+    async fn get_oauth_client(&self, new_homeserver: &String) -> anyhow::Result<Client> {
+        let homeserver_url: Url = Url::parse(new_homeserver)?;
         let client = Client::new(homeserver_url).await?;
         Ok(client)
     }
@@ -128,20 +152,51 @@ impl ClientHandler {
         &self,
         username: String,
         password: String,
-        homeserver: String
+        homeserver: String,
     ) -> anyhow::Result<Option<ClientHandler>> {
         let new_client = self.get_new_client(&username, &homeserver).await?;
-        new_client.matrix_auth()
+        new_client
+            .matrix_auth()
             .login_username(&username, &password)
             .initial_device_display_name("Echelon")
-            .send().await?;
+            .send()
+            .await?;
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
         // store the session tokens in stronghold
         let session_tokens = new_client.session_tokens().unwrap();
         let secrets = self.app_handle.state::<SecretState>();
-        secrets.0.set_login_tokens(new_client.user_id().unwrap().to_string(), session_tokens.access_token, session_tokens.refresh_token.unwrap_or("".to_string()))?;
+        secrets.0.set_login_tokens(
+            new_client.user_id().unwrap().to_string(),
+            session_tokens.access_token,
+            session_tokens.refresh_token.unwrap_or("".to_string()),
+        )?;
+
+        // set "last" and "accounts" in tauri store
+        let app_data_dir = self.app_handle.path().app_data_dir()?;
+        let mut store_path = app_data_dir.clone();
+        store_path.push("store.json");
+        let store = self.app_handle.store(store_path)?;
+        let mut accounts = match store.get("accounts") {
+            Some(val) => {
+                serde_json::from_value::<Accounts>(val)?
+            },
+            _ => {
+                Accounts { last: None, accounts: Vec::new()}
+            },
+        };
+
+        if !accounts.last.is_none() {
+            println!("a");
+            let last = accounts.last.as_ref().unwrap();
+            println!("Last before logging in is None");
+            accounts.accounts.push(last.clone());
+        }
+        accounts.last = Some(new_client.user_id().unwrap().to_string());
+        store.set("accounts", serde_json::to_value(accounts)?);
+        store.save()?;
+        println!("Accounts after logging in {:?}", store.get("accounts"));
 
         Ok(Some(ClientHandler {
             matrix_client: new_client,
@@ -169,43 +224,55 @@ impl ClientHandler {
         oauth.server_metadata().await?;
 
         // Make a listener to listen on a random port to receive the GET request
-        let (redirect_uri, redirect_handle)  = LocalServerBuilder::new().spawn().await?;
+        let (redirect_uri, redirect_handle) = LocalServerBuilder::new().spawn().await?;
 
         // If user has registered and is logging in
         if login {
             // oauth.restore_registered_client()
         }
-
         // If the user hasn't registered, we register them
         else {
             // Setup client metadata
             let url = Url::parse("https://github.com/flaxeneel2/echelon/")?;
             let new_client_url = Localized::new(url, Vec::new());
-            let grant_types : Vec<OAuthGrantType> = vec![
+            let grant_types: Vec<OAuthGrantType> = vec![
                 OAuthGrantType::AuthorizationCode {
                     redirect_uris: vec![redirect_uri.clone()],
-                } ,
-                OAuthGrantType::DeviceCode
+                },
+                OAuthGrantType::DeviceCode,
             ];
-            let client_metadata = ClientMetadata::new(ApplicationType::Native, grant_types, new_client_url);
+            let client_metadata =
+                ClientMetadata::new(ApplicationType::Native, grant_types, new_client_url);
             let raw_client_metadata = Raw::new(&client_metadata)?;
             oauth.register_client(&raw_client_metadata).await?;
         }
         // Build authorization data and login, then build the OAuthAuthCodeUrlBuilder
-        let auth_data = oauth.login(redirect_uri.clone(), None, None, None).build().await?;
-        self.app_handle.opener().open_url(auth_data.url, None::<&str>)?;
+        let auth_data = oauth
+            .login(redirect_uri.clone(), None, None, None)
+            .build()
+            .await?;
+        self.app_handle
+            .opener()
+            .open_url(auth_data.url, None::<&str>)?;
 
         // Wait for redirect
-        let query = redirect_handle.await
+        let query = redirect_handle
+            .await
             .ok_or_else(|| anyhow::anyhow!("OAuth redirect was cancelled or timed out"))?;
 
         // Finish Login, the SDK verifies the csrf token internally
-        oauth.finish_login(UrlOrQuery::Query(query.to_string())).await?;
+        oauth
+            .finish_login(UrlOrQuery::Query(query.to_string()))
+            .await?;
 
         // store the session tokens in stronghold
         let session_tokens = new_client.session_tokens().unwrap();
         let secrets = self.app_handle.state::<SecretState>();
-        secrets.0.set_login_tokens(new_client.user_id().unwrap().to_string(), session_tokens.access_token, session_tokens.refresh_token.unwrap_or("".to_string()))?;
+        secrets.0.set_login_tokens(
+            new_client.user_id().unwrap().to_string(),
+            session_tokens.access_token,
+            session_tokens.refresh_token.unwrap_or("".to_string()),
+        )?;
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
@@ -216,24 +283,27 @@ impl ClientHandler {
         }))
     }
 
-    pub async fn restore_session(&self, username: String, homeserver: String) -> anyhow::Result<Option<ClientHandler>> {
+    pub async fn restore_session(
+        &self,
+        username: String,
+        homeserver: String,
+    ) -> anyhow::Result<Option<ClientHandler>> {
         let new_client = self.get_new_client(&username, &homeserver).await?;
         let access_token = ""; // put key here temporarily for testing
         println!("{:?}", new_client.user_id());
-        new_client.restore_session(
-            AuthSession::Matrix(
-                MatrixSession {
-                    meta: SessionMeta {
-                        user_id: format!("@{}:{}", username, homeserver.replace("https://", "")).parse::<OwnedUserId>()?,
-                        device_id: OwnedDeviceId::from("echelon-device".to_string()),
-                    },
-                    tokens: SessionTokens {
-                        access_token: access_token.parse()?,
-                        refresh_token: None,
-                    }
-                }
-            )
-        ).await?;
+        new_client
+            .restore_session(AuthSession::Matrix(MatrixSession {
+                meta: SessionMeta {
+                    user_id: format!("@{}:{}", username, homeserver.replace("https://", ""))
+                        .parse::<OwnedUserId>()?,
+                    device_id: OwnedDeviceId::from("echelon-device".to_string()),
+                },
+                tokens: SessionTokens {
+                    access_token: access_token.parse()?,
+                    refresh_token: None,
+                },
+            }))
+            .await?;
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
@@ -244,7 +314,12 @@ impl ClientHandler {
         }))
     }
 
-    pub async fn reset_account(&self, account_reset_type: AccountResetType, password: Option<String>, key_backup: Option<String>) -> anyhow::Result<()> {
+    pub async fn reset_account(
+        &self,
+        account_reset_type: AccountResetType,
+        password: Option<String>,
+        key_backup: Option<String>,
+    ) -> anyhow::Result<()> {
         let client = &self.matrix_client;
         let recovery = client.encryption().recovery();
 
@@ -257,12 +332,13 @@ impl ClientHandler {
                             debug!("UIAA authentication required for identity reset");
                             if let Some(pwd) = password {
                                 // Create password authentication data
-                                let user_id = client.user_id()
+                                let user_id = client
+                                    .user_id()
                                     .ok_or_else(|| anyhow::anyhow!("No user ID available"))?;
 
                                 let mut password_auth = Password::new(
                                     UserIdentifier::UserIdOrLocalpart(user_id.to_string()),
-                                    pwd
+                                    pwd,
                                 );
 
                                 // Set the session if available
@@ -271,10 +347,14 @@ impl ClientHandler {
                                 }
 
                                 // Perform the reset with password authentication
-                                handle.reset(Some(AuthData::Password(password_auth))).await?;
+                                handle
+                                    .reset(Some(AuthData::Password(password_auth)))
+                                    .await?;
                                 debug!("Identity reset completed successfully");
                             } else {
-                                return Err(anyhow::anyhow!("Password required for UIAA authentication"));
+                                return Err(anyhow::anyhow!(
+                                    "Password required for UIAA authentication"
+                                ));
                             }
                         }
                         CrossSigningResetAuthType::OAuth(oauth_info) => {
@@ -293,12 +373,13 @@ impl ClientHandler {
                 if let Some(key_backup) = key_backup {
                     recovery.recover(&key_backup).await?;
                 } else {
-                    Err(anyhow::anyhow!("KeyBackup reset required for key backup reset"))?;
+                    Err(anyhow::anyhow!(
+                        "KeyBackup reset required for key backup reset"
+                    ))?;
                 }
             }
         }
 
         Ok(())
     }
-
 }
