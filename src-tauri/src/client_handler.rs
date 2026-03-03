@@ -136,16 +136,13 @@ impl ClientHandler {
             .initial_device_display_name("Echelon")
             .send().await?;
 
-        debug!("Login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
-
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
+        // store the session tokens in stronghold
         let session_tokens = new_client.session_tokens().unwrap();
         let secrets = self.app_handle.state::<SecretState>();
-        secrets.0.set_login_tokens(username.clone(), session_tokens.access_token, session_tokens.refresh_token.unwrap_or("".to_string()))?;
+        secrets.0.set_login_tokens(new_client.user_id().unwrap().to_string(), session_tokens.access_token, session_tokens.refresh_token.unwrap_or("".to_string()))?;
 
-        let login_tokens = secrets.0.get_login_tokens(username.clone())?;
-        println!("login_tokens: {:?}", login_tokens);
         Ok(Some(ClientHandler {
             matrix_client: new_client,
             sync_manager: SyncManager::new(),
@@ -176,7 +173,6 @@ impl ClientHandler {
 
         // If user has registered and is logging in
         if login {
-            // TODO implement once we add the client ID to the sqlite db/stronghold vault
             // oauth.restore_registered_client()
         }
 
@@ -206,8 +202,10 @@ impl ClientHandler {
         // Finish Login, the SDK verifies the csrf token internally
         oauth.finish_login(UrlOrQuery::Query(query.to_string())).await?;
 
-        // TODO remove this once we have stronghold setup, this is only for testing purposes with dummy accounts
-        debug!("OAuth login successful, access token is {}", new_client.access_token().unwrap_or("No access token".to_string()));
+        // store the session tokens in stronghold
+        let session_tokens = new_client.session_tokens().unwrap();
+        let secrets = self.app_handle.state::<SecretState>();
+        secrets.0.set_login_tokens(new_client.user_id().unwrap().to_string(), session_tokens.access_token, session_tokens.refresh_token.unwrap_or("".to_string()))?;
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
@@ -221,7 +219,7 @@ impl ClientHandler {
     pub async fn restore_session(&self, username: String, homeserver: String) -> anyhow::Result<Option<ClientHandler>> {
         let new_client = self.get_new_client(&username, &homeserver).await?;
         let access_token = ""; // put key here temporarily for testing
-
+        println!("{:?}", new_client.user_id());
         new_client.restore_session(
             AuthSession::Matrix(
                 MatrixSession {
