@@ -121,12 +121,7 @@ impl SecretService {
         }
     }
 
-    pub fn set_login_tokens(
-        &self,
-        username: String,
-        access_token: String,
-        refresh_token: String,
-    ) -> Result<()> {
+    pub fn set_login_tokens(&self, username: String, access_token: String, refresh_token: Option<String>) -> Result<()> {
         let stronghold = Stronghold::default();
         let client_store = self.set_client_store(&username, &stronghold)?;
         let store = client_store.store.unwrap();
@@ -134,13 +129,22 @@ impl SecretService {
         let snapshot_path = client_store.snapshot_path;
 
         store.insert(b"access_token".to_vec(), Vec::from(access_token), None)?;
-        store.insert(b"refresh_token".to_vec(), Vec::from(refresh_token), None)?;
+
+        match refresh_token {
+            Some(token) => {
+                store.insert(b"refresh_token".to_vec(), Vec::from(token), None)?;
+
+            },
+            None => {
+                store.delete(b"refresh_token")?;
+            }
+        }
 
         stronghold.commit_with_keyprovider(&snapshot_path, &key_provider)?;
         Ok(())
     }
 
-    pub fn get_login_tokens(&self, username: String) -> Result<Option<(String, String)>> {
+    pub fn get_login_tokens(&self, username: String) -> Result<Option<(String, Option<String>)>> {
         let stronghold = Stronghold::default();
         match self.get_client_store(&username, &stronghold)? {
             ClientStore {
@@ -149,11 +153,12 @@ impl SecretService {
                 let Some(access) = store.get(b"access_token")? else {
                     return Ok(None);
                 };
-                let Some(refresh) = store.get(b"refresh_token")? else {
-                    return Ok(None);
-                };
+
                 let access_token = String::from_utf8(access)?;
-                let refresh_token = String::from_utf8(refresh)?;
+                let refresh_token = match store.get(b"refresh_token")? {
+                    Some(refresh) => Some(String::from_utf8(refresh)?),
+                    None => None,
+                };
 
                 Ok(Some((access_token, refresh_token)))
             }

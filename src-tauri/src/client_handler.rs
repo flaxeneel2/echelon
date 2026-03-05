@@ -168,7 +168,7 @@ impl ClientHandler {
         secrets.0.set_login_tokens(
             new_client.user_id().unwrap().to_string(),
             session_tokens.access_token,
-            session_tokens.refresh_token.unwrap_or("".to_string()),
+            session_tokens.refresh_token,
         )?;
 
         let echelon_store = EchelonStore::new(&self.app_handle)?;
@@ -249,8 +249,13 @@ impl ClientHandler {
         secrets.0.set_login_tokens(
             new_client.user_id().unwrap().to_string(),
             session_tokens.access_token,
-            session_tokens.refresh_token.unwrap_or("".to_string()),
+            session_tokens.refresh_token,
         )?;
+
+        let echelon_store = EchelonStore::new(&self.app_handle)?;
+        echelon_store.add_account(&new_client.user_id().unwrap().to_string())?;
+        let all_accounts = echelon_store.get_accounts()?;
+        println!("Last:{:?}\nAccounts: {:?}", all_accounts.last, all_accounts.accounts);
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
