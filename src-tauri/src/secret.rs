@@ -30,30 +30,29 @@ impl SecretService {
         let file_name = blake3::hash(username.as_bytes()).to_string();
         let mut path = self.stronghold_path.clone();
         path.push(file_name);
-
-        println!("Username:{}\nSnapshot Path:{:?}", username, path);
         SnapshotPath::from_path(path)
+    }
+
+    fn generate_password(&self) -> Result<String> {
+        let mut buf = [0u8; 32];
+        getrandom::fill(&mut buf)?;
+        Ok(hex::encode(buf))
     }
 
     fn get_key_provider(&self) -> Result<KeyProvider> {
         let entry = Entry::new(&self.keyring_service, &self.keyring_user)?;
 
-        match entry.get_password() {
+        let keyring_password = match entry.get_password() {
             Err(NoEntry) => {
                 println!("Creating new keyring password");
-                let mut buf = [0u8; 32];
-                getrandom::fill(&mut buf)?;
-                entry.set_password(&hex::encode(buf))?;
+                let password = self.generate_password()?;
+                entry.set_password(&password)?;
+                password
             }
-            Ok(_) => {
-                println!("Keyring password set")
-            }
+            Ok(password) => { password }
             Err(e) => return Err(e.into()),
-        }
+        };
 
-        // uncomment to delete the keyring password (for testing)
-        //println!("{:?}", entry.delete_credential().unwrap());
-        let keyring_password = entry.get_password()?;
         Ok(KeyProvider::with_passphrase_hashed_blake2b(
             keyring_password,
         )?)
@@ -66,40 +65,37 @@ impl SecretService {
 
         match snapshot {
             Ok(()) => {
-                println!("Successfully loaded snapshot");
+                let client = match stronghold.load_client(&username) {
+                    Ok(client) => {
+                        client
+                    }
+                    Err(ClientError::ClientDataNotPresent) => {
+                        return Ok(ClientStore {
+                            key_provider,
+                            snapshot_path,
+                            store: None,
+                        });
+                    }
+                    Err(e) => return Err(e.into()),
+                };
+
+                let store = client.store();
+
+                Ok(ClientStore {
+                    key_provider,
+                    snapshot_path,
+                    store: Option::from(store),
+                })
             }
             Err(ClientError::SnapshotFileMissing(_path)) => {
-                return Ok(ClientStore {
+                Ok(ClientStore {
                     key_provider,
                     snapshot_path,
                     store: None,
-                });
+                })
             }
             Err(e) => return Err(e.into()),
         }
-
-        let client = match stronghold.load_client(&username) {
-            Ok(client) => {
-                println!("Loaded client successfully");
-                client
-            }
-            Err(ClientError::ClientDataNotPresent) => {
-                return Ok(ClientStore {
-                    key_provider,
-                    snapshot_path,
-                    store: None,
-                });
-            }
-            Err(e) => return Err(e.into()),
-        };
-
-        let store = client.store();
-
-        Ok(ClientStore {
-            key_provider,
-            snapshot_path,
-            store: Option::from(store),
-        })
     }
 
     fn set_client_store(&self, username: &String, stronghold: &Stronghold) -> Result<ClientStore> {
@@ -110,7 +106,6 @@ impl SecretService {
                 snapshot_path,
                 store: _,
             } => {
-                println!("Creating new snapshot and client store");
                 let client = stronghold.create_client(&username)?;
                 Ok(ClientStore {
                     key_provider,
@@ -125,8 +120,6 @@ impl SecretService {
         let stronghold = Stronghold::default();
         let client_store = self.set_client_store(&username, &stronghold)?;
         let store = client_store.store.unwrap();
-        let key_provider = client_store.key_provider;
-        let snapshot_path = client_store.snapshot_path;
 
         store.insert(b"access_token".to_vec(), Vec::from(access_token), None)?;
 
@@ -140,16 +133,20 @@ impl SecretService {
             }
         }
 
-        stronghold.commit_with_keyprovider(&snapshot_path, &key_provider)?;
+        if self.get_sqlite_pwd(username.clone())?.is_none() {
+            let password = self.generate_password()?;
+            store.insert(b"sqlite_password".to_vec(), Vec::from(password), None)?;
+        }
+
+        stronghold.commit_with_keyprovider(&client_store.snapshot_path, &client_store.key_provider)?;
+
         Ok(())
     }
 
     pub fn get_login_tokens(&self, username: String) -> Result<Option<(String, Option<String>)>> {
         let stronghold = Stronghold::default();
         match self.get_client_store(&username, &stronghold)? {
-            ClientStore {
-                store: Some(store), ..
-            } => {
+            ClientStore { store: Some(store), .. } => {
                 let Some(access) = store.get(b"access_token")? else {
                     return Ok(None);
                 };
@@ -164,5 +161,31 @@ impl SecretService {
             }
             ClientStore { store: _, .. } => Ok(None),
         }
+    }
+
+    pub fn get_sqlite_pwd(&self, username: String) -> Result<Option<String>>{
+        let stronghold = Stronghold::default();
+
+        match self.get_client_store(&username, &stronghold)? {
+            ClientStore { store : Some(store), .. } => {
+                let Some(password) = store.get(b"sqlite_password")? else {
+                    return Ok(None);
+                };
+                Ok(Some(String::from_utf8(password)?))
+            },
+            ClientStore { store: _, ..} => Ok(None),
+        }
+    }
+
+    fn set_sqlite_pwd(&self, username: String) -> Result<()> {
+        let stronghold = Stronghold::default();
+        let password = self.generate_password()?;
+        let client_store = self.get_client_store(&username, &stronghold)?;
+        let store = client_store.store.unwrap();
+
+        store.insert(b"sqlite_password".to_vec(), Vec::from(password), None)?;
+        stronghold.commit_with_keyprovider(&client_store.snapshot_path, &client_store.key_provider)?;
+        Ok(())
+
     }
 }

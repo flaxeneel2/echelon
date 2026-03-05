@@ -171,10 +171,9 @@ impl ClientHandler {
             session_tokens.refresh_token,
         )?;
 
+        // store the new username
         let echelon_store = EchelonStore::new(&self.app_handle)?;
         echelon_store.add_account(&new_client.user_id().unwrap().to_string())?;
-        let all_accounts = echelon_store.get_accounts()?;
-        println!("Last:{:?}\nAccounts: {:?}", all_accounts.last, all_accounts.accounts);
 
         Ok(Some(ClientHandler {
             matrix_client: new_client,
@@ -252,10 +251,9 @@ impl ClientHandler {
             session_tokens.refresh_token,
         )?;
 
+        // store the new username
         let echelon_store = EchelonStore::new(&self.app_handle)?;
         echelon_store.add_account(&new_client.user_id().unwrap().to_string())?;
-        let all_accounts = echelon_store.get_accounts()?;
-        println!("Last:{:?}\nAccounts: {:?}", all_accounts.last, all_accounts.accounts);
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
