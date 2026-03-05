@@ -1,23 +1,5 @@
 <script lang="ts">
-  import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
-  import { listen } from "@tauri-apps/api/event";
   import "$lib/styles/login.css";
-
-  // Tauri Core Shim
-  window.core = window.core || {};
-  window.core.invoke_no_timer = invoke;
-  window.core.invoke = async (fn_to_invoke: string, args: InvokeArgs | undefined) => {
-    const start = performance.now();
-    try {
-      const res = await invoke(fn_to_invoke, args);
-      console.log(`Fetch [${fn_to_invoke}] took ${performance.now() - start}ms.`, res);
-      return res;
-    } catch (error) {
-      console.error(`Command [${fn_to_invoke}] failed:`, error);
-      throw error;
-    }
-  };
-  window.core.listen = listen;
 
   // Svelte 5 States
   let username = $state("");
@@ -34,7 +16,7 @@
     loading = true;
     try {
       const fullHomeserver = "https://"+ homeserver
-      await invoke("login", { username, password, homeserver: fullHomeserver });
+      await window.core.invoke("login", { username, password, homeserver: fullHomeserver });
     } catch (e) {
       error = String(e);
     } finally {
@@ -46,7 +28,7 @@
     error = "";
     loading = true;
     try {
-      await invoke(`oauth_${type}`, { homeserver });
+      await window.core.invoke(`oauth_${type}`, { homeserver });
     } catch (e) {
       error = String(e);
     } finally {
