@@ -2,7 +2,7 @@ use crate::account::account_reset_types::AccountResetType;
 use crate::events::client_events::ClientEvents;
 use crate::sync_manager::SyncManager;
 use crate::SecretState;
-use crate::Accounts;
+use crate::store::EchelonStore;
 use matrix_sdk::authentication::matrix::MatrixSession;
 use matrix_sdk::authentication::oauth::registration::{
     ApplicationType, ClientMetadata, Localized, OAuthGrantType,
@@ -18,10 +18,8 @@ use ruma::api::client::uiaa::{AuthData, Password, RegistrationToken, UserIdentif
 use ruma::serde::Raw;
 use ruma::{OwnedDeviceId, OwnedUserId};
 use std::path::Path;
-use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Url};
 use tauri_plugin_opener::OpenerExt;
-use tauri_plugin_store::StoreExt;
 use tracing::{debug, error};
 
 pub struct ClientHandler {
@@ -173,30 +171,10 @@ impl ClientHandler {
             session_tokens.refresh_token.unwrap_or("".to_string()),
         )?;
 
-        // set "last" and "accounts" in tauri store
-        let app_data_dir = self.app_handle.path().app_data_dir()?;
-        let mut store_path = app_data_dir.clone();
-        store_path.push("store.json");
-        let store = self.app_handle.store(store_path)?;
-        let mut accounts = match store.get("accounts") {
-            Some(val) => {
-                serde_json::from_value::<Accounts>(val)?
-            },
-            _ => {
-                Accounts { last: None, accounts: Vec::new()}
-            },
-        };
-
-        if !accounts.last.is_none() {
-            println!("a");
-            let last = accounts.last.as_ref().unwrap();
-            println!("Last before logging in is None");
-            accounts.accounts.push(last.clone());
-        }
-        accounts.last = Some(new_client.user_id().unwrap().to_string());
-        store.set("accounts", serde_json::to_value(accounts)?);
-        store.save()?;
-        println!("Accounts after logging in {:?}", store.get("accounts"));
+        let echelon_store = EchelonStore::new(&self.app_handle)?;
+        echelon_store.add_account(&new_client.user_id().unwrap().to_string())?;
+        let all_accounts = echelon_store.get_accounts()?;
+        println!("Last:{:?}\nAccounts: {:?}", all_accounts.last, all_accounts.accounts);
 
         Ok(Some(ClientHandler {
             matrix_client: new_client,

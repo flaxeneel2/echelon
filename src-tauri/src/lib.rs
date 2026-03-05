@@ -1,10 +1,8 @@
-use serde::{Deserialize, Serialize};
 use crate::user::{
     get_all_spaces_with_trees, get_dm_rooms, get_rooms, get_space_tree, get_spaces, login, logout,
     oauth_login, oauth_register, register, reset_account, restore_session,
 };
 use tauri::Manager;
-use tauri_plugin_store::StoreExt;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 mod account;
@@ -15,6 +13,7 @@ mod secret;
 mod spaces;
 mod sync_manager;
 mod user;
+mod store;
 
 use client_handler::ClientHandler;
 use secret::SecretService;
@@ -22,11 +21,6 @@ use secret::SecretService;
 pub struct ClientState(pub RwLock<Option<ClientHandler>>);
 pub struct SecretState(SecretService);
 
-#[derive(Serialize, Deserialize)]
-pub struct Accounts {
-    last : Option<String>,
-    accounts : Vec<String>,
-}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -38,19 +32,6 @@ pub fn run() {
             let client = rt.block_on(ClientHandler::new(app_handle));
             let client_state = ClientState(RwLock::new(Some(client)));
             let app_data_dir = app.path().app_data_dir()?;
-
-            let mut store_path = app_data_dir.clone();
-            store_path.push("store.json");
-            let store = app.store(store_path)?;
-            if store.has("last") {
-                let accounts = Accounts {last: None, accounts: Vec::new()};
-                store.set("accounts", serde_json::to_value(accounts)?);
-                store.save()?;
-            }
-
-            if let Some(last) = store.get("accounts") {
-                println!("Last: {:?}", serde_json::from_value::<Accounts>(last).unwrap().last.unwrap());
-            }
 
             let mut stronghold_dir = app_data_dir.clone();
             stronghold_dir.push("stronghold");
