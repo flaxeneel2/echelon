@@ -104,5 +104,7 @@
     <button class="register-button" onclick={() => OAuth_action('register')} disabled={loading}>
       register
     </button>
+
+    <a href="/chat" class="dev-chat-link">→ open chat (dev)</a>
   </section>
 </main>

@@ -1,6 +1,6 @@
 # Echelon
 
-A (hopefully) good crossplatform client for matrix servers.
+A (hopefully) good cross-platform client for matrix servers.
 
 ## Contributing
 

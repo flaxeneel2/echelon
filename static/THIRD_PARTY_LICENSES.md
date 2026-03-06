@@ -46,6 +46,62 @@ This software uses icons and assets from the following resources:
 
 ---
 
+## Snowflake Icon (Solar Broken Line Icons)
+* **Source:** [Snowflake SVG Vector](https://www.svgrepo.com/svg/529894/snowflake)
+* **Author** Solar Icons
+* **License** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+* **Changes** Colors modified to suit theme.
+
+---
+
+## Dropdown Icon (Dazzle Line Icons)
+* **Source:** [Dropdown SVG Vector](https://www.svgrepo.com/svg/509905/dropdown-arrow)
+* **License:** [MIT License](https://opensource.org/licenses/MIT)
+
+---
+
+## Encrypted Icon (Dazzle Line Icons)
+* **Source:** [Dropdown SVG Vector](https://www.svgrepo.com/svg/509905/dropdown-arrow)
+* **License** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+
+---
+
+## Unencrypted Icon (Zest Interface Icons)
+* **Source:** [Dropdown SVG Vector](https://www.svgrepo.com/svg/509905/dropdown-arrow)
+* **License** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+
+---
+
+## Voice Chat Icon (Shopicons Filled Interface Icons)
+* **Source:** [Mic SVG Vector](https://www.svgrepo.com/svg/453973/mic)
+* **License:** [MIT License](https://opensource.org/licenses/MIT)
+
+---
+
+## Undeafened Icon (Lucide Icons)
+* **Source:** [headphones](https://lucide.dev/icons/headphones)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
+## Deafened Icon (Lucide Icons)
+* **Source:** [headphone-off](https://www.svgrepo.com/svg/453973/mic)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
+## Unmuted Icon (Wolf Kit Solid Glyph Icons)
+* **Source:** [Mic SVG Vector](https://www.svgrepo.com/svg/491449/mic)
+* **License** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+
+---
+
+## Muted Icon (Wolf Kit Solid Glyph Icons)
+* **Source:** [Mic Slash SVG Vector](https://www.svgrepo.com/svg/453973/mic)
+* **License** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+
+---
+
 ## Trademark Disclaimer
 
 The logos and brand names included in this software are the property of their respective owners:
@@ -64,7 +120,9 @@ Use of these trademarks is for identification purposes only and does not imply e
 
 The maintainers of this repository aim to respect all intellectual property rights and follow all licensing requirements.
 
-If you are a copyright or trademark owner of any assets used in this software, and believe that any content in this repository (such as logos, icons, or code) is being used incorrectly, or without proper authorization, or is in violation of your brand guidelines:
+If you are a copyright or trademark owner of any assets used in this software, and believe that any content in this repository (such as logos, icons, or code)is being used incorrectly, 
+
+or without proper authorization, or is in violation of your brand guidelines:
 
 Please:
 1. **Contact the maintainers:** Please open an **[issue](https://github.com/flaxeneel2/echelon/issues)** on the GitHub repository.

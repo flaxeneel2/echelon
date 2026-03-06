@@ -238,3 +238,16 @@ button:disabled, input:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+.dev-chat-link {
+    margin-top: 16px;
+    font-size: 13px;
+    color: rgba(89, 181, 209, 0.45);
+    text-decoration: none;
+    letter-spacing: 0.03em;
+    transition: color 0.2s;
+}
+
+.dev-chat-link:hover {
+    color: #59B5D1;
+}
