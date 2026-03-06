@@ -45,7 +45,7 @@ To install dependencies, run:
 bun install
 ```
 
-### Building for desktop
+### Building for Desktop
 
 To build for desktop, run:
 
@@ -53,7 +53,7 @@ To build for desktop, run:
 bun run tauri build
 ```
 
-### Building for android
+### Building for Android
 
 NOTE: ANDROID BUILDS ARE BROKEN FOR NOW (on nix at least, no android 36 for now, on stable)
 
@@ -62,3 +62,9 @@ To build for android, run:
 ```sh
 bun run tauri android build
 ```
+
+### Licensed Software
+
+All software used can be found inside [THIRD_PARTY_LICENSES.md](https://github.com/flaxeneel2/echelon/tree/master/static/THIRD_PARTY_LICENSES.md), or if the URL is broken for some reason;
+
+At ```static/THIRD_PARTY_LICENSES.md``` inside this repository.
