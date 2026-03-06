@@ -54,7 +54,7 @@ impl EchelonStore {
     /// Add a new account to the store and save it.
     ///
     /// # Arguments
-    /// * `user_id`: The Matrix account's userid in the format of @username:homeserver.
+    /// * `user_id`: The Matrix account's userid in the format of `@username:homeserver`.
     ///
     /// This will set the `last` value to the user, and add the account to the `accounts` vector at index 0.
     ///
@@ -71,7 +71,7 @@ impl EchelonStore {
     /// Remove an account from the store
     ///
     /// # Arguments:
-    /// * `user_id`: The Matrix account's userid in the format of @username:homeserver.
+    /// * `user_id`: The Matrix account's userid in the format of `@username:homeserver`.
     ///
     /// If the account does not exist, don't edit the store.
     ///

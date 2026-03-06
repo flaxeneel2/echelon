@@ -25,20 +25,29 @@ impl SecretService {
         }
     }
 
-    fn get_snapshot_path(&self, username: &String) -> SnapshotPath {
-        // hash the username so the resulting characters are guaranteed to be an accepted path
-        let file_name = blake3::hash(username.as_bytes()).to_string();
+    /// Return the path of the snapshot as a [SnapshotPath] object.
+    ///
+    /// # Arguments
+    /// * `user_id`: The Matrix account's userid in the format of `@username:homeserver`.
+    ///
+    /// Given that a Matrix userid is formatted as '@username:homeserver', it won't be accepted as a path for some operating systems, so instead the path for each user's snapshot is a hash of their userid instead.
+    fn get_snapshot_path(&self, user_id: &String) -> SnapshotPath {
+        let file_name = blake3::hash(user_id.as_bytes()).to_string();
         let mut path = self.stronghold_path.clone();
         path.push(file_name);
         SnapshotPath::from_path(path)
     }
 
+    /// Generate a 32 byte random string using [getrandom]
     fn generate_password(&self) -> Result<String> {
         let mut buf = [0u8; 32];
         getrandom::fill(&mut buf)?;
         Ok(hex::encode(buf))
     }
 
+    /// Access the password from the operating system's keyring and return it as a [KeyProvider].
+    ///
+    /// If a keyring entry does not exist, then generate one and set it first.
     fn get_key_provider(&self) -> Result<KeyProvider> {
         let entry = Entry::new(&self.keyring_service, &self.keyring_user)?;
 
@@ -58,14 +67,21 @@ impl SecretService {
         )?)
     }
 
-    fn get_client_store(&self, username: &String, stronghold: &Stronghold) -> Result<ClientStore> {
+    /// Return a [ClientStore] object, you need this to set/get/remove items for that specific user's store.
+    ///
+    /// # Arguments
+    /// * * `user_id`: The Matrix account's userid in the format of `@username:homeserver`.
+    /// * `stronghold` - The in-memory stronghold object being used.
+    ///
+    /// If a snapshot doesn't already exist, or if there is no client in the snapshot, return a [ClientStore] with the [ClientStore::store] value as [None].
+    fn get_client_store(&self, user_id: &String, stronghold: &Stronghold) -> Result<ClientStore> {
         let key_provider = self.get_key_provider()?;
-        let snapshot_path = self.get_snapshot_path(&username);
+        let snapshot_path = self.get_snapshot_path(&user_id);
         let snapshot = stronghold.load_snapshot(&key_provider, &snapshot_path);
 
         match snapshot {
             Ok(()) => {
-                let client = match stronghold.load_client(&username) {
+                let client = match stronghold.load_client(&user_id) {
                     Ok(client) => {
                         client
                     }
@@ -94,19 +110,24 @@ impl SecretService {
                     store: None,
                 })
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => Err(e.into()),
         }
     }
 
-    fn set_client_store(&self, username: &String, stronghold: &Stronghold) -> Result<ClientStore> {
-        match self.get_client_store(&username, stronghold)? {
+    /// If a [ClientStore] with a [ClientStore::store] that is not [None] exists for that user, return it, otherwise, make one and then return the updated [ClientStore].
+    ///
+    /// # Arguments
+    /// * * `user_id`: The Matrix account's userid in the format of `@username:homeserver`.
+    /// * `stronghold` - The in-memory stronghold object being used.
+    fn set_client_store(&self, user_id: &String, stronghold: &Stronghold) -> Result<ClientStore> {
+        match self.get_client_store(&user_id, stronghold)? {
             client_store @ ClientStore { store: Some(_), .. } => Ok(client_store),
             ClientStore {
                 key_provider,
                 snapshot_path,
                 store: _,
             } => {
-                let client = stronghold.create_client(&username)?;
+                let client = stronghold.create_client(&user_id)?;
                 Ok(ClientStore {
                     key_provider,
                     snapshot_path,
@@ -116,9 +137,16 @@ impl SecretService {
         }
     }
 
-    pub fn set_login_tokens(&self, username: String, access_token: String, refresh_token: Option<String>) -> Result<()> {
+
+    /// Set the values of the `access_token` and `refresh_token` of the user and save in the stronghold, also sets a password for that user's sqlite database.
+    ///
+    /// # Arguments
+    /// * `user_id`: The Matrix account's userid in the format of `@username:homeserver`.
+    ///
+    /// Given that a refresh token is optional, if one is not provided, then the value [None] will be stored instead.
+    pub fn set_login_tokens(&self, user_id: String, access_token: String, refresh_token: Option<String>) -> Result<()> {
         let stronghold = Stronghold::default();
-        let client_store = self.set_client_store(&username, &stronghold)?;
+        let client_store = self.set_client_store(&user_id, &stronghold)?;
         let store = client_store.store.unwrap();
 
         store.insert(b"access_token".to_vec(), Vec::from(access_token), None)?;
@@ -133,7 +161,7 @@ impl SecretService {
             }
         }
 
-        if self.get_sqlite_pwd(username.clone())?.is_none() {
+        if self.get_sqlite_pwd(user_id.clone())?.is_none() {
             let password = self.generate_password()?;
             store.insert(b"sqlite_password".to_vec(), Vec::from(password), None)?;
         }
@@ -143,9 +171,15 @@ impl SecretService {
         Ok(())
     }
 
-    pub fn get_login_tokens(&self, username: String) -> Result<Option<(String, Option<String>)>> {
+    /// Returns the `access_token` and `refresh_token` stored in the stronghold for a user.
+    ///
+    /// # Arguments
+    /// * `user_id`: The Matrix account's userid in the format of `@username:homeserver`.
+    ///
+    /// If the given user is not in the store, return [None].
+    pub fn get_login_tokens(&self, user_id: String) -> Result<Option<(String, Option<String>)>> {
         let stronghold = Stronghold::default();
-        match self.get_client_store(&username, &stronghold)? {
+        match self.get_client_store(&user_id, &stronghold)? {
             ClientStore { store: Some(store), .. } => {
                 let Some(access) = store.get(b"access_token")? else {
                     return Ok(None);
@@ -163,10 +197,16 @@ impl SecretService {
         }
     }
 
-    pub fn get_sqlite_pwd(&self, username: String) -> Result<Option<String>>{
+    /// Returns the `sqlite_password` stored in the stronghold for a user.
+    ///
+    /// # Arguments
+    /// * `user_id`: The Matrix account's userid in the format of `@username:homeserver`.
+    ///
+    /// If the given user is not in the store, return [None].
+    pub fn get_sqlite_pwd(&self, user_id: String) -> Result<Option<String>>{
         let stronghold = Stronghold::default();
 
-        match self.get_client_store(&username, &stronghold)? {
+        match self.get_client_store(&user_id, &stronghold)? {
             ClientStore { store : Some(store), .. } => {
                 let Some(password) = store.get(b"sqlite_password")? else {
                     return Ok(None);
@@ -177,10 +217,14 @@ impl SecretService {
         }
     }
 
-    fn set_sqlite_pwd(&self, username: String) -> Result<()> {
+    /// Sets the `sqlite_password` stored in the stronghold for a user.
+    ///
+    /// # Argument
+    /// * `user_id`: The Matrix account's userid in the format of `@username:homeserver`.
+    fn set_sqlite_pwd(&self, user_id: String) -> Result<()> {
         let stronghold = Stronghold::default();
         let password = self.generate_password()?;
-        let client_store = self.get_client_store(&username, &stronghold)?;
+        let client_store = self.get_client_store(&user_id, &stronghold)?;
         let store = client_store.store.unwrap();
 
         store.insert(b"sqlite_password".to_vec(), Vec::from(password), None)?;
