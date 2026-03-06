@@ -24,26 +24,41 @@ impl EchelonStore {
         Ok(EchelonStore { store, })
     }
 
+    /// Create an [Accounts] object that gets the values from the store.
+    ///
+    /// If the store is empty, then return placeholder values.
     pub fn get_accounts(&self) -> Result<Accounts> {
-        let accounts = match self.store.get("accounts") {
-            Some(val) => { serde_json::from_value::<Accounts>(val)? },
-            _ => {
-                Accounts {
-                    last: None,
-                    accounts: Vec::new()
-                }
-            },
-        };
-
-        Ok(accounts)
+        Ok(
+            match self.store.get("accounts") {
+                Some(val) => { serde_json::from_value::<Accounts>(val)? },
+                _ => {
+                    Accounts {
+                        last: None,
+                        accounts: Vec::new()
+                    }
+                },
+            }
+        )
     }
 
+    /// Save the new [Accounts] object's values in the store.
+    ///
+    /// # Arguments:
+    /// * `accounts`: The [Accounts] object you wish to store.
     fn save_accounts(&self, accounts: &Accounts) -> Result<()> {
         self.store.set("accounts", serde_json::to_value(accounts)?);
         self.store.save()?;
         Ok(())
     }
 
+    /// Add a new account to the store and save it.
+    ///
+    /// # Arguments
+    /// * `user_id`: The Matrix account's userid in the format of @username:homeserver.
+    ///
+    /// This will set the `last` value to the user, and add the account to the `accounts` vector at index 0.
+    ///
+    /// If the account already exists, don't add a new duplicate account, just move it to index 0.
     pub fn add_account(&self, user_id: &String) -> Result<()> {
         let mut accounts = self.get_accounts()?;
 
@@ -53,6 +68,14 @@ impl EchelonStore {
         self.save_accounts(&accounts)
     }
 
+    /// Remove an account from the store
+    ///
+    /// # Arguments:
+    /// * `user_id`: The Matrix account's userid in the format of @username:homeserver.
+    ///
+    /// If the account does not exist, don't edit the store.
+    ///
+    /// If the account is also set to the `last` value in store, replace it with the first user in the `accounts` vector, if there is no other user, then last will be set to [None].
     pub fn remove_account(&self, user_id: String) -> Result<()> {
         let mut accounts = self.get_accounts()?;
 
@@ -71,6 +94,7 @@ impl EchelonStore {
         self.save_accounts(&accounts)
     }
 
+    /// Return the userid of the account who was added to the store.
     pub fn get_last(&self) -> Result<Option<String>> {
         Ok(self.get_accounts()?.last)
     }
