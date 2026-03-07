@@ -61,13 +61,13 @@ This software uses icons and assets from the following resources:
 ---
 
 ## Encrypted Icon (Dazzle Line Icons)
-* **Source:** [Dropdown SVG Vector](https://www.svgrepo.com/svg/509905/dropdown-arrow)
+* **Source:** [Shield SVG Vector](https://www.svgrepo.com/svg/532327/shield)
 * **License** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 
 ---
 
-## Unencrypted Icon (Zest Interface Icons)
-* **Source:** [Dropdown SVG Vector](https://www.svgrepo.com/svg/509905/dropdown-arrow)
+## Unencrypted Icon (Dazzle Line Icons)
+* **Source:** [Shield Slash SVG Vector](https://www.svgrepo.com/svg/532336/shield-slash)
 * **License** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
 
 ---

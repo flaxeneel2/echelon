@@ -1,6 +1,23 @@
-/* chat.css */
+/* ============================================================
+   chat.css — main layout & component styles for the chat view
+   ============================================================ */
 
-/* ─── Reset / Base ───────────────────────────────────────────────────────── */
+/* ── Design tokens ──────────────────────────────────────────── */
+:root {
+    --panel-pad:         clamp(10px, 0.781vw, 15px);
+    --line-color:        rgba(255, 255, 255, 0.18);
+    --header-row-height: clamp(58px, 6.574vh, 71px);
+    --line-inset:        8%;
+    --spaces-size:       clamp(40px, 2.604vw, 50px);
+    --spaces-inset:      clamp(10px, 0.781vw, 15px);
+    --left-sidebar-width:  clamp(220px, 16vw, 300px);
+    --right-panel-width:   clamp(220px, 19vw, 340px);
+
+    /* Shared easing curve used throughout */
+    --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Reset ──────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -21,20 +38,45 @@ button {
 
 img { display: block; }
 
-/* ─── SVG colour helpers ─────────────────────────────────────────────────── */
-.icon-white {
-    filter: brightness(0) invert(1);
-}
-.icon-teal {
-    filter: brightness(0) saturate(100%) invert(84%) sepia(19%) saturate(1074%)
-            hue-rotate(156deg) brightness(91%) contrast(85%);
-}
-.icon-dim {
-    filter: brightness(0) saturate(100%) invert(35%) sepia(20%) saturate(600%)
-            hue-rotate(190deg) brightness(90%) contrast(80%);
+/* ── Decorative divider lines ───────────────────────────────── */
+/* Used on header rows: thin inset rule rendered via pseudo-element */
+.gapped-line-bottom,
+.gapped-line-top {
+    position: relative;
 }
 
-/* ─── App shell ──────────────────────────────────────────────────────────── */
+.gapped-line-bottom::after,
+.gapped-line-top::before {
+    content: "";
+    position: absolute;
+    left: var(--line-inset-left, var(--line-inset));
+    width: calc(100% - var(--line-inset-left, var(--line-inset)) - var(--line-inset-right, var(--line-inset)));
+    height: 1.5px;
+    background: var(--line-color);
+    border-radius: 10px;
+    pointer-events: none;
+}
+
+.gapped-line-bottom::after { bottom: 0; }
+.gapped-line-top::before   { top: 0; }
+
+/* Fixed-height header strip shared by all panel headers */
+.section-header-row {
+    height: var(--header-row-height);
+    min-height: var(--header-row-height);
+    max-height: var(--header-row-height);
+}
+
+/* Dashed circle placeholder for unloaded icons/avatars */
+.placeholder-icon {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px dashed rgba(255, 255, 255, 0.45);
+    opacity: 0.7;
+}
+
+/* ── Root layout ────────────────────────────────────────────── */
 .app-container {
     display: flex;
     width: 100vw;
@@ -42,66 +84,128 @@ img { display: block; }
     overflow: hidden;
 }
 
-/* ─── Spaces rail ────────────────────────────────────────────────────────── */
-.spaces-bar {
-    width: 60px;
-    min-width: 60px;
+/* ── Left panel (spaces rail + sidebar + user bar) ──────────── */
+
+/*
+ * The left panel is a flex column: [spaces-rail | sidebar-shell] on top, user-bar below.
+ * Collapse width animation is isolated to `.sidebar-shell` (lightweight wrapper),
+ * while `.sidebar-container` itself only animates transform/opacity.
+ * This avoids repeatedly relaying out/painting the heavy sidebar content tree.
+ */
+.left-panel {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
     height: 100%;
-    background: #030714;
+    overflow: hidden;
+    min-width: calc(var(--spaces-size) + (var(--spaces-inset) * 2));
+}
+
+/* Row that holds the spaces rail and sidebar side by side */
+.left-panel-columns {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* ── Spaces rail ────────────────────────────────────────────── */
+.spaces-bar {
+    width: calc(var(--spaces-size) + (var(--spaces-inset) * 2));
+    height: 100%;
+    background: #070912;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 14px 0;
     gap: 10px;
     flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Header row inside the spaces rail */
+.spaces-bar-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    --line-inset-left: var(--spaces-inset);
+    --line-inset-right: var(--spaces-inset);
+}
+
+/* DM shortcut icon */
+.spaces-dm-icon-wrapper {
+    width: var(--spaces-size);
+    height: var(--spaces-size);
+    border-radius: 10px;
+    background: #0C103B;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid transparent;
+    transition: border-radius 0.2s, background 0.2s;
+}
+
+.spaces-dm-icon-wrapper:hover {
+    border-radius: 12px;
+    background: #2D1B8E;
 }
 
 .spaces-dm-icon {
-    width: 28px;
-    height: 28px;
+    width: calc(var(--spaces-size) * 0.55);
+    height: calc(var(--spaces-size) * 0.55);
     filter: brightness(0) invert(1);
 }
 
-.spaces-divider {
-    width: 36px;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.15);
-    flex-shrink: 0;
+/* Scrollable list of space icons */
+.spaces-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    flex: 1;
+    min-height: 0;
 }
 
 .space {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
+    width: var(--spaces-size);
+    height: var(--spaces-size);
+    border-radius: 10px;
     background: #0C103B;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 13px;
     color: rgba(255, 255, 255, 0.55);
-    cursor: pointer;
-    transition: border-radius 0.2s, background 0.2s, color 0.2s;
     border: 2px solid transparent;
+    transition: border-radius 0.2s, background 0.2s, color 0.2s;
 }
 
 .space:hover {
-    border-radius: 16px;
+    border-radius: 12px;
     background: #2D1B8E;
     color: #fff;
 }
 
 .space.active {
-    border-radius: 16px;
-    background: #2D1B8E;
+    border-radius: 12px;
+    background: #29356A;
     color: #59B5D1;
     border-color: #59B5D1;
 }
 
-/* Collapse button — sits at the bottom of the spaces rail */
+/* ── Sidebar collapse button (bottom of spaces rail) ────────── */
+.spaces-bottom-zone {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding-bottom: 6px;
+}
+
 .spaces-collapse-btn {
-    margin-top: auto;
-    width: 32px;
-    height: 32px;
+    width: 38px;
+    height: 38px;
     border-radius: 8px;
     display: flex;
     align-items: center;
@@ -109,57 +213,267 @@ img { display: block; }
     transition: background 0.2s;
 }
 
-.spaces-collapse-btn:hover {
-    background: rgba(89, 181, 209, 0.12);
-}
+.spaces-collapse-btn:hover { background: rgba(89, 181, 209, 0.12); }
 
+/*
+ * Arrow icon: starts pointing right (→ = sidebar open).
+ * `.rotated` flips it left (← = sidebar collapsed).
+ * Only `transform` is animated — GPU-composited, no layout cost.
+ */
 .spaces-collapse-arrow {
     width: 18px;
     height: 18px;
-    /* Points right (➜) by default — rotating ‑90° makes the chevron point left */
-    transform: rotate(-90deg);
-    transition: transform 0.25s ease, filter 0.2s;
+    transform: rotate(90deg);
     filter: brightness(0) saturate(100%) invert(84%) sepia(19%) saturate(1074%)
             hue-rotate(156deg) brightness(91%) contrast(85%);
+    transition: transform 0.28s var(--ease-out), filter 0.2s;
+    will-change: transform;
 }
 
-/* When collapsed the arrow flips to point right again */
-.spaces-collapse-btn.rotated .spaces-collapse-arrow {
-    transform: rotate(90deg);
+.spaces-collapse-btn.rotated .spaces-collapse-arrow { transform: rotate(-90deg); }
+.spaces-collapse-btn:hover .spaces-collapse-arrow   { filter: brightness(0) invert(1); }
+
+/* ── Collapsed-state dock (replaces collapse btn when sidebar is hidden) ── */
+/*
+ * Sits pinned to the bottom of the spaces rail.
+ * Hidden (opacity 0, no pointer events) when sidebar is expanded.
+ * Only `opacity` is transitioned — GPU-composited.
+ */
+.spaces-collapsed-dock {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: #070912;
+    padding: 8px 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s var(--ease-out);
 }
 
-.spaces-collapse-btn:hover .spaces-collapse-arrow {
+/*
+ * Wrapper div around the profile + floating button stack.
+ * mouseenter/mouseleave are tracked here so the hide-timer logic
+ * lives in one place (see +page.svelte).
+ */
+.spaces-dock-zone {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Profile circle in the collapsed dock */
+.spaces-collapsed-profile {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: #151f4a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+/* Avatar placeholder inside the profile circle */
+.spaces-collapsed-pfp {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #d8dce3;
+}
+
+/* Online dot, offset to top-right of the profile circle */
+.spaces-collapsed-profile .activity-status {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    border-color: #070912;
+}
+
+/*
+ * Floating action stack that pops up above the profile on hover.
+ *
+ * ANIMATION STRATEGY: only `opacity` and `transform` are animated.
+ * Both are GPU-composited properties — no layout or paint on each frame.
+ * `will-change: opacity, transform` promotes this element to its own
+ * compositor layer so transitions run entirely on the GPU thread.
+ */
+.spaces-hover-stack {
+    position: absolute;
+    bottom: calc(100% + 6px); /* floats 6px above the profile */
+    left: 50%;
+    transform: translateX(-50%) translateY(6px); /* starts slightly lower */
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 6px;
+    align-items: center;
+    padding-bottom: 4px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s var(--ease-out), transform 0.22s var(--ease-out);
+    will-change: opacity, transform;
+}
+
+/*
+ * Invisible hit-area bridge: stretches downward from the stack to cover
+ * the 6px gap + profile height, so the mouse never "leaves" the dock-zone
+ * while moving between the profile and the buttons.
+ * Only exists when the stack is visible — no stray hit area when hidden.
+ */
+.spaces-hover-stack.stack-visible::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    /* padding-bottom(4) + gap(6) + profile(38) + dock-padding(8) */
+    height: 56px;
+    pointer-events: auto;
+}
+
+/* Shown state: slides up and fades in */
+.app-container.sidebar-collapsed .spaces-hover-stack.stack-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Thin rule above the action buttons */
+.spaces-collapsed-divider {
+    width: 70%;
+    height: 1.5px;
+    background: var(--line-color);
+    border-radius: 10px;
+    align-self: center;
+}
+
+/* Individual action buttons in the floating stack */
+.spaces-hover-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: rgba(45, 53, 106, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.18s var(--ease-out), transform 0.18s var(--ease-out);
+}
+
+.spaces-hover-btn:hover {
+    background: rgba(89, 181, 209, 0.18);
+    transform: scale(1.08);
+}
+
+/* Active state used for muted/deafened */
+.spaces-hover-btn.active { background: rgba(237, 66, 69, 0.24); }
+
+.spaces-hover-icon {
+    width: 18px;
+    height: 18px;
     filter: brightness(0) invert(1);
 }
 
-/* ─── Sidebar container ──────────────────────────────────────────────────── */
+/* Re-open button points left; flip-h mirrors an icon horizontally */
+.spaces-hover-icon.reopen { transform: rotate(-90deg); }
+.spaces-hover-icon.flip-h  { transform: scaleX(-1); }
+
+/* ── Sidebar collapsed state overrides ──────────────────────── */
+
+/* Hide the regular collapse button when collapsed */
+.app-container.sidebar-collapsed .spaces-collapse-btn,
+.app-container.sidebar-collapsed .spaces-bottom-zone {
+    display: none;
+}
+
+/* Extra bottom padding so space icons don't hide behind the pinned dock */
+.app-container.sidebar-collapsed .spaces-list {
+    padding-bottom: calc(38px + 16px + 6px);
+    overflow-y: auto;
+}
+
+/* Show the collapsed dock */
+.app-container.sidebar-collapsed .spaces-collapsed-dock {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/*
+ * Collapsing the channel sidebar: animate `width` to 0.
+ * `opacity` fades content so it doesn't abruptly cut off mid-transition.
+ * Same easing + near-same duration keeps the two in sync visually.
+ */
+.sidebar-shell {
+    width: var(--left-sidebar-width);
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+    contain: layout paint;
+    transition: width 0.3s var(--ease-out);
+}
+
 .sidebar-container {
-    width: 220px;
-    min-width: 220px;
+    width: var(--left-sidebar-width);
     height: 100%;
     background: #070d2a;
     display: flex;
     flex-direction: column;
-    flex-shrink: 0;
     overflow: hidden;
-    transition: width 0.25s ease, min-width 0.25s ease, opacity 0.2s ease;
+    transform: translateX(0);
+    opacity: 1;
+    transition: transform 0.3s var(--ease-out), opacity 0.24s var(--ease-out);
+    will-change: transform, opacity;
+}
+
+.app-container.sidebar-collapsed .sidebar-shell {
+    width: 0;
 }
 
 .app-container.sidebar-collapsed .sidebar-container {
-    width: 0;
-    min-width: 0;
+    transform: translateX(-14px);
     opacity: 0;
     pointer-events: none;
 }
 
-/* ─── Space header ───────────────────────────────────────────────────────── */
+/*
+ * User bar collapse: use `opacity` + `transform` instead of `max-height`.
+ * `max-height` triggers a layout recalculation on every animation frame.
+ * `transform: translateY` + `opacity` are both composited — smooth 60fps.
+ */
+.user-bar {
+    display: flex;
+    flex-direction: column;
+    background: #040b1f;
+    flex-shrink: 0;
+    padding: 0 0 8px;
+    overflow: hidden;
+    transition: opacity 0.28s var(--ease-out), transform 0.3s var(--ease-out);
+    will-change: opacity, transform;
+}
+
+.app-container.sidebar-collapsed .user-bar {
+    opacity: 0;
+    transform: translateY(100%);
+    pointer-events: none;
+}
+
+/* ── Space name / info header ────────────────────────────────── */
 .space-nameinfo {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 14px 14px;
+    padding: 0 var(--panel-pad);
     gap: 8px;
     flex-shrink: 0;
+    --line-inset-left: var(--panel-pad);
+    --line-inset-right: var(--panel-pad);
 }
 
 .space-nameinfo-text {
@@ -170,7 +484,8 @@ img { display: block; }
 }
 
 .space-title {
-    font-size: 20px;
+    font-size: clamp(16px, 1.1vw, 20px);
+    line-height: 1;
     color: #fff;
     white-space: nowrap;
     overflow: hidden;
@@ -178,7 +493,9 @@ img { display: block; }
 }
 
 .space-homeserver {
-    font-size: 13px;
+    font-size: clamp(12px, 0.95vw, 16px);
+    line-height: 1;
+    margin-left: 1.5ch;
     color: #40529F;
     white-space: nowrap;
     overflow: hidden;
@@ -186,40 +503,33 @@ img { display: block; }
 }
 
 .space-dropdown-arrow {
-    width: 16px;
-    height: 16px;
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
     filter: brightness(0) invert(1);
     opacity: 0.7;
-    cursor: pointer;
     transition: opacity 0.2s;
 }
 
 .space-dropdown-arrow:hover { opacity: 1; }
 
-.space-nameinfo-divider {
-    height: 1px;
-    background: rgba(255, 255, 255, 0.1);
-    margin: 0 14px;
-    flex-shrink: 0;
-}
-
-/* ─── Room list ──────────────────────────────────────────────────────────── */
+/* ── Room list ───────────────────────────────────────────────── */
 .rooms {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 10px 0 10px;
+    padding: 10px 0;
     display: flex;
     flex-direction: column;
     gap: 2px;
 }
 
-.rooms::-webkit-scrollbar { width: 4px; }
+/* Thin scrollbar */
+.rooms::-webkit-scrollbar       { width: 4px; }
 .rooms::-webkit-scrollbar-track { background: transparent; }
 .rooms::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
-/* Category headers */
+/* Category header row */
 .sub-space {
     display: flex;
     align-items: center;
@@ -230,24 +540,25 @@ img { display: block; }
     color: rgba(255, 255, 255, 0.45);
     font-size: 12px;
     letter-spacing: 0.04em;
-    text-transform: uppercase;
+    text-transform: lowercase;
+    transition: color 0.15s;
 }
 
 .sub-space:hover { color: rgba(255, 255, 255, 0.75); }
 
+/* Arrow rotates when category is collapsed */
 .sub-space-arrow {
     width: 12px;
     height: 12px;
     flex-shrink: 0;
     filter: brightness(0) saturate(100%) invert(40%);
-    transition: transform 0.2s ease;
+    transition: transform 0.22s var(--ease-out);
+    will-change: transform;
 }
 
-.sub-space-arrow-collapsed {
-    transform: rotate(-90deg);
-}
+.sub-space-arrow-collapsed { transform: rotate(-90deg); }
 
-/* Room rows */
+/* Individual room row */
 .room {
     display: flex;
     align-items: center;
@@ -258,70 +569,173 @@ img { display: block; }
     cursor: pointer;
     color: rgba(255, 255, 255, 0.55);
     font-size: 15px;
+    min-width: 0;
     transition: background 0.15s, color 0.15s;
 }
 
-.room:hover {
-    background: rgba(89, 181, 209, 0.08);
-    color: rgba(255, 255, 255, 0.85);
+.room span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
-.room.active {
-    background: #2D1B8E;
-    color: #fff;
-}
+.room:hover { background: rgba(89, 181, 209, 0.08); color: rgba(255, 255, 255, 0.85); }
+.room.active { background: #2D1B8E; color: #fff; }
 
 .room-icon {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
-    filter: brightness(0) saturate(100%) invert(40%) sepia(15%) saturate(500%)
-            hue-rotate(190deg);
+    filter: brightness(0) saturate(100%) invert(40%) sepia(15%) saturate(500%) hue-rotate(190deg);
     transition: filter 0.15s;
 }
 
+/* Highlight icon when room is hovered or active */
 .room:hover .room-icon,
 .room.active .room-icon {
     filter: brightness(0) saturate(100%) invert(84%) sepia(19%) saturate(1074%)
             hue-rotate(156deg) brightness(91%) contrast(85%);
 }
 
-/* Voice room variant */
-.room.voice-room {
-    padding-left: 20px;
+/* Active voice room row: open-bottom border joins the participant list below */
+.room.voice-room-active {
+    background: #1a2255;
+    color: #59B5D1;
+    border: 1px solid #59B5D1;
+    border-radius: 6px 6px 0 0;
+    margin-bottom: 0;
 }
 
-/* DM room variant */
-.room.dm-room {
-    padding-left: 20px;
+.room.voice-room-active .room-icon {
+    filter: brightness(0) saturate(100%) invert(84%) sepia(19%) saturate(1074%)
+            hue-rotate(156deg) brightness(91%) contrast(85%);
 }
 
-/* ─── User bar ───────────────────────────────────────────────────────────── */
-.user-bar {
+/* Animated participant list that expands below the active voice room */
+.voice-participants {
+    display: flex;
+    flex-direction: column;
+    margin: 0 6px 4px;
+    background: #1a2255;
+    border: 1px solid #59B5D1;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 4px 0 6px;
+    overflow: hidden;
+    /* Slide + fade in — transform+opacity = composited, no layout cost */
+    animation: voice-participants-in 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+@keyframes voice-participants-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.voice-participant {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px 4px 28px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 13px;
+}
+
+.voice-participant-pfp {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    filter: brightness(0) saturate(100%) invert(84%) sepia(19%) saturate(1074%)
+            hue-rotate(156deg) brightness(91%) contrast(85%);
+    opacity: 0.7;
+}
+
+/* ── User bar ────────────────────────────────────────────────── */
+.voice-call-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 12px 8px;
+}
+
+.voice-call-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.voice-call-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.voice-call-actions { display: flex; gap: 4px; }
+
+.voice-action-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: rgba(45, 53, 106, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.voice-action-btn:hover { background: rgba(89, 181, 209, 0.2); }
+
+.voice-action-icon {
+    width: 16px;
+    height: 16px;
+    filter: brightness(0) invert(1);
+    opacity: 0.75;
+}
+
+.voice-call-icon  { width: 14px; height: 14px; }
+
+.voice-call-label {
+    font-size: 11px;
+    color: #59B5D1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.voice-call-room {
+    font-size: 15px;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.voice-call-divider {
+    height: 1.5px;
+    background: rgba(89, 181, 209, 0.4);
+    margin: 0 12px;
+    border-radius: 10px;
+}
+
+.user-bar-main {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
-    background: #040b1f;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    flex-shrink: 0;
 }
 
-.user-bar-pfp-wrapper {
-    position: relative;
-    flex-shrink: 0;
-}
+.user-bar-pfp-wrapper { position: relative; flex-shrink: 0; }
 
 .pfp-placeholder {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: #2D1B8E;
+    background: #d9dde4;
 }
 
+/* Online/offline dot; border colour matches the element's background */
 .activity-status {
     position: absolute;
-    bottom: 0;
+    top: 0;
     right: 0;
     width: 11px;
     height: 11px;
@@ -330,9 +744,7 @@ img { display: block; }
     background: #3d3d3d;
 }
 
-.activity-status.online  { background: #3ba55c; }
-.activity-status.idle    { background: #faa81a; }
-.activity-status.dnd     { background: #ed4245; }
+.activity-status.online { background: #3ba55c; }
 
 .user-bar-info {
     display: flex;
@@ -342,27 +754,18 @@ img { display: block; }
     min-width: 0;
 }
 
-.user-bar-name {
-    font-size: 14px;
-    color: #fff;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
+/* Both text nodes share truncation behaviour */
+.user-bar-name,
 .user-bar-homeserver {
-    font-size: 12px;
-    color: #40529F;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.user-bar-controls {
-    display: flex;
-    gap: 4px;
-    flex-shrink: 0;
-}
+.user-bar-name       { font-size: 14px; color: #fff; }
+.user-bar-homeserver { font-size: 12px; color: #40529F; }
+
+.user-bar-controls { display: flex; gap: 4px; flex-shrink: 0; }
 
 .control-btn {
     width: 30px;
@@ -374,29 +777,337 @@ img { display: block; }
     transition: background 0.15s;
 }
 
-.control-btn:hover { background: rgba(255, 255, 255, 0.08); }
+.control-btn:hover  { background: rgba(255, 255, 255, 0.08); }
 .control-btn.active { background: rgba(237, 66, 69, 0.2); }
 
 .control-btn img {
     width: 18px;
     height: 18px;
-    filter: brightness(0) saturate(100%) invert(40%) sepia(15%) saturate(500%)
-            hue-rotate(190deg);
-    transition: filter 0.15s;
+    filter: brightness(0) saturate(100%) invert(40%) sepia(15%) saturate(500%) hue-rotate(190deg);
 }
 
-.control-btn:hover img {
-    filter: brightness(0) invert(1);
-}
+.control-btn img.flip-h { transform: scaleX(-1); }
+.control-btn:hover img  { filter: brightness(0) invert(1); }
 
-.control-btn.active img {
-    filter: brightness(0) saturate(100%) invert(42%) sepia(80%) saturate(700%)
-            hue-rotate(320deg) brightness(110%);
-}
-
-/* ─── Main area placeholder ──────────────────────────────────────────────── */
+/* ── Main content area (chat + participants) ─────────────────── */
 .app-layout {
     flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+    background: #070d2a;
+}
+
+/* Chat column */
+.chat-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid rgba(255,255,255,0.06);
     overflow: hidden;
     background: #0a1128;
 }
+
+/* Chat column header */
+.chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--panel-pad);
+    --line-inset-left: var(--panel-pad);
+    --line-inset-right: var(--panel-pad);
+}
+
+.chat-header-left,
+.chat-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chat-header-room-icon {
+    width: 16px;
+    height: 16px;
+    filter: brightness(0) invert(1);
+}
+
+.chat-header-room-name { font-size: 18px; color: #fff; }
+
+/* Small icon buttons used in the chat header and composer */
+.header-icon-btn,
+.composer-icon-btn,
+.composer-send-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header-icon-btn:hover,
+.composer-icon-btn:hover,
+.composer-send-btn:hover { background: rgba(255,255,255,0.08); }
+
+/* Scrollable message feed */
+.chat-messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px var(--panel-pad);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Individual message bubble */
+.message {
+    display: flex;
+    width: 100%;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    align-items: flex-start;
+    transition: background 0.15s;
+}
+
+.message:hover { background: rgba(101, 112, 181, 0.45); }
+
+.message-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #c9ccd1;
+    flex-shrink: 0;
+}
+
+.message-content {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.message-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.message-author { font-size: 16px; color: #fff;                  line-height: 1.15; }
+.message-time   { font-size: 10px; color: rgba(255,255,255,0.4); line-height: 1.15; }
+.message-text   { font-size: 16px; color: #fff;                  line-height: 1.35; }
+
+.message-reply-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 2px 0 3px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+}
+
+.reply-symbol { font-size: 12px; color: rgba(255,255,255,0.65); }
+
+/* Reply button appears only when the message is hovered */
+.message-reply-btn {
+    margin-left: auto;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.message:hover .message-reply-btn { opacity: 1; pointer-events: auto; }
+.message-reply-btn:hover           { background: rgba(255,255,255,0.08); }
+
+/* Image placeholder */
+.message-image-placeholder {
+    width: min(340px, 100%);
+    aspect-ratio: 4 / 3;
+    margin-top: 8px;
+    border-radius: 2px;
+    background: radial-gradient(circle at 35% 20%, #ad2f1f, #2b130d 60%, #160c07 100%);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 12px;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+/* Message composer strip */
+.chat-composer-area {
+    padding: 8px var(--panel-pad) 10px;
+}
+
+.typing-indicator {
+    font-size: 14px;
+    color: rgba(255,255,255,0.45);
+    padding: 0 0 6px 6px;
+}
+
+.chat-composer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #060d34;
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.chat-input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.chat-input:focus { outline: none; }
+
+/* ── Participants panel ───────────────────────────────────────── */
+/*
+ * Same pattern as the sidebar: `width` slides to 0, `opacity` fades content.
+ * `will-change` is omitted here too — `width` isn't composited.
+ */
+.participants-panel {
+    width: var(--right-panel-width);
+    height: 100%;
+    flex-shrink: 0;
+    background: #060d34;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: translateX(0);
+    opacity: 1;
+    transition: transform 0.28s var(--ease-out), opacity 0.22s var(--ease-out);
+    will-change: transform, opacity;
+}
+
+.participants-shell {
+    width: var(--right-panel-width);
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+    contain: layout paint;
+    transition: width 0.28s var(--ease-out);
+}
+
+.participants-shell.hidden {
+    width: 0;
+}
+
+.participants-shell.hidden .participants-panel {
+    transform: translateX(14px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Hide participants panel on narrow screens */
+@media (max-width: 1100px) {
+    .participants-shell { display: none; }
+    .chat-main          { border-right: none; }
+}
+
+/* Participants panel header */
+.participants-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--panel-pad);
+    gap: 8px;
+    --line-inset-left: var(--panel-pad);
+    --line-inset-right: var(--panel-pad);
+}
+
+.room-stat {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+
+.room-stat-label {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: #40529F;
+    text-transform: uppercase;
+}
+
+.room-stat-value { font-size: 11px; color: rgba(255,255,255,0.4); }
+.room-stat-num   { color: #59B5D1; font-weight: 700; }
+
+/* Segmented fill bar — purely CSS, no JS */
+.room-stat-bar {
+    display: inline-block;
+    width: 52px;
+    height: 8px;
+    border-radius: 2px;
+    border: 1px solid rgba(89, 181, 209, 0.2);
+    background:
+        repeating-linear-gradient(
+            to right,
+            transparent 0px, transparent 4px,
+            #050919     4px, #050919     5px
+        ),
+        linear-gradient(
+            to right,
+            #59B5D1 0%,
+            #59B5D1 calc(var(--fill, 0) * 100%),
+            #0C103B calc(var(--fill, 0) * 100%),
+            #0C103B 100%
+        );
+}
+
+.room-stat-pct { font-size: 11px; color: #59B5D1; font-weight: 700; min-width: 3ch; }
+
+/* Scrollable member list */
+.participants-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px var(--panel-pad);
+}
+
+.participants-group { margin-bottom: 10px; }
+
+.participants-group-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: rgba(255,255,255,0.7);
+    font-size: 20px;
+    margin-bottom: 4px;
+}
+
+.participants-group-arrow {
+    width: 12px;
+    height: 12px;
+    filter: brightness(0) invert(1);
+    opacity: 0.7;
+}
+
+.participants-member {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 5px;
+    color: rgba(255,255,255,0.75);
+    font-size: 14px;
+    margin-bottom: 3px;
+    background: rgba(45, 58, 139, 0.25);
+}
+
+.participants-member-icon { width: 14px; height: 14px; }
