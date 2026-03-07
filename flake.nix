@@ -10,15 +10,10 @@
   outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        rust_overlay_src = builtins.fetchTarball {
-          url = "https://github.com/oxalica/rust-overlay/archive/master.tar.gz";
-          sha256 = "0yfi6r12pap2jfbbrijx65g0clmv5gw654hlgrapr5q3qjl6panc";
-        };
-
         pkgs = import nixpkgs {
           inherit system;
           overlays = [
-            (import rust_overlay_src)
+            (import rust-overlay)
           ];
           config = {
             allowUnfree = true;
