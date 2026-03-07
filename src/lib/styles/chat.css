@@ -16,13 +16,14 @@
     /* Shared easing curve used throughout */
     --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
     --ease-butter: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-smooth: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 /* ── Reset ──────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    background: #050919;
+    background: #0a1128;
     font-family: 'JetBrains Mono', monospace;
     color: #fff;
     overflow: hidden;
@@ -230,6 +231,7 @@ img { display: block; }
             hue-rotate(156deg) brightness(91%) contrast(85%);
     transition: transform 0.28s var(--ease-out), filter 0.2s;
     will-change: transform;
+    backface-visibility: hidden;    /* Fixes "micro-stutters" in WebKit */
 }
 
 .spaces-collapse-btn.rotated .spaces-collapse-arrow { transform: rotate(-90deg); }
@@ -247,11 +249,11 @@ img { display: block; }
     left: 0;
     width: 100%;
     background: #070912;
-    padding: 8px 0 8px var(--spaces-inset);
+    padding: 8px 0 18px;
     z-index: 3;
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s var(--ease-out);
@@ -269,26 +271,17 @@ img { display: block; }
     align-items: center;
 }
 
-/* Profile circle in the collapsed dock */
+/* Profile circle in the collapsed dock — now just a hover/click anchor, no visual pfp */
 .spaces-collapsed-profile {
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    background: #151f4a;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
     flex-shrink: 0;
     cursor: pointer;
-}
-
-/* Avatar placeholder inside the profile circle */
-.spaces-collapsed-pfp {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: #d8dce3;
 }
 
 /* Online dot, offset to top-right of the profile circle */
@@ -321,6 +314,7 @@ img { display: block; }
     pointer-events: none;
     transition: opacity 0.22s var(--ease-out), transform 0.22s var(--ease-out);
     will-change: opacity, transform;
+    backface-visibility: hidden;    /* Fixes "micro-stutters" in WebKit */
 }
 
 /*
@@ -418,21 +412,24 @@ img { display: block; }
     min-width: 0;
     overflow: hidden;
     position: relative;
-    contain: layout paint;
-    transition: width 0.36s var(--ease-butter);
+    background: #0a1128;
+    /* Width snaps instantly — layout change fires once, not every frame */
+    transition: width 0s;
 }
 
 .sidebar-container {
     width: var(--left-sidebar-width);
+    min-width: var(--left-sidebar-width);
     height: 100%;
     background: #070d2a;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transform: translateX(0);
     opacity: 1;
-    transition: transform 0.36s var(--ease-butter), opacity 0.26s var(--ease-out);
-    will-change: transform, opacity;
+    transform-origin: left center;
+    /* scaleX is GPU-composited — zero layout/paint cost per frame */
+    transition: transform 0.42s var(--ease-smooth);
+    will-change: transform;
 }
 
 .app-container.sidebar-collapsed .sidebar-shell {
@@ -440,8 +437,8 @@ img { display: block; }
 }
 
 .app-container.sidebar-collapsed .sidebar-container {
-    transform: translateX(-10px);
-    opacity: 0;
+    transform: scaleX(0);
+    opacity: 1;
     pointer-events: none;
 }
 
@@ -457,8 +454,9 @@ img { display: block; }
     flex-shrink: 0;
     padding: 0 0 8px;
     overflow: hidden;
-    transition: opacity 0.28s var(--ease-out), transform 0.3s var(--ease-out);
-    will-change: opacity, transform;
+    transform-origin: left center;
+    transition: opacity 0.42s var(--ease-smooth), transform 0.42s var(--ease-smooth);
+    will-change: transform;
 }
 
 .app-container.sidebar-collapsed .user-bar {
@@ -467,7 +465,7 @@ img { display: block; }
     right: 0;
     bottom: 0;
     opacity: 0;
-    transform: translateY(100%);
+    transform: scaleX(0);
     pointer-events: none;
     height: 0;
     min-height: 0;
@@ -567,6 +565,7 @@ img { display: block; }
     filter: brightness(0) saturate(100%) invert(40%);
     transition: transform 0.22s var(--ease-out);
     will-change: transform;
+    backface-visibility: hidden;    /* Fixes "micro-stutters" in WebKit */
 }
 
 .sub-space-arrow-collapsed { transform: rotate(-90deg); }
@@ -667,20 +666,21 @@ img { display: block; }
 .voice-call-info {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    padding: 10px 12px 8px;
-}
-
-.voice-call-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    gap: 2px;
+    /* Left-align with the pfp, right padding matches user-bar-main */
+    padding: 8px 12px 12px 20px;
 }
 
 .voice-call-status {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+
+.voice-call-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .voice-call-actions { display: flex; gap: 4px; }
@@ -720,6 +720,7 @@ img { display: block; }
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
 }
 
 .voice-call-divider {
@@ -729,14 +730,38 @@ img { display: block; }
     border-radius: 10px;
 }
 
+/*
+ * Persistent pfp: lives directly on .left-panel (position:relative),
+ * never inside sidebar-container or user-bar scaleX transforms.
+ * Pinned to bottom-left so it sits at the same screen position in
+ * both collapsed and expanded states — no squish, no jump.
+ *
+ * Vertical:   bottom = user-bar padding-bottom (8px) + user-bar-main padding-bottom (10px) = 18px
+ * Horizontal: left   = --spaces-inset (same as the spaces rail icon inset)
+ */
+.persistent-pfp {
+    position: absolute;
+    bottom: 16px;
+    /* Centre within the spaces rail: (rail-width - pfp-width) / 2 */
+    left: calc((var(--spaces-size) + var(--spaces-inset) * 2 - 36px) / 2);
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    z-index: 5;
+    pointer-events: none;
+}
+
 .user-bar-main {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
-    padding: 10px 12px;
+    /*
+     * padding-left reserves space for the persistent-pfp (36px) + gap (8px),
+     * offset from --spaces-inset so content starts right after the pfp.
+     */
+    padding: 10px 12px 10px calc(var(--spaces-inset) + 36px + 8px);
 }
-
-.user-bar-pfp-wrapper { position: relative; flex-shrink: 0; }
 
 .pfp-placeholder {
     width: 36px;
@@ -760,6 +785,7 @@ img { display: block; }
 .activity-status.online { background: #3ba55c; }
 
 .user-bar-info {
+    margin-left: 7px;
     display: flex;
     flex-direction: column;
     gap: 1px;
@@ -809,7 +835,6 @@ img { display: block; }
     min-height: 0;
     display: flex;
     overflow: hidden;
-    background: #070d2a;
 }
 
 /* Chat column */
@@ -923,13 +948,19 @@ img { display: block; }
     color: rgba(255,255,255,0.55);
 }
 
-.reply-symbol { font-size: 12px; color: rgba(255,255,255,0.65); }
+.reply-link-icon {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    opacity: 0.8;
+    transform: scaleX(-1);
+}
 
 /* Reply button appears only when the message is hovered */
 .message-reply-btn {
     margin-left: auto;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     border-radius: 6px;
     display: flex;
     align-items: center;
@@ -937,6 +968,13 @@ img { display: block; }
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s, background 0.15s;
+}
+
+.reply-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+    opacity: 0.8;
 }
 
 .message:hover .message-reply-btn { opacity: 1; pointer-events: auto; }
@@ -965,7 +1003,7 @@ img { display: block; }
 .typing-indicator {
     font-size: 14px;
     color: rgba(255,255,255,0.45);
-    padding: 0 0 6px 6px;
+    padding: 0 0 6px calc(var(--panel-pad) + 12px);
 }
 
 .chat-composer {
@@ -996,16 +1034,18 @@ img { display: block; }
  */
 .participants-panel {
     width: var(--right-panel-width);
+    min-width: var(--right-panel-width);
     height: 100%;
     flex-shrink: 0;
-    background: #060d34;
+    background: #070d2a;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transform: translateX(0);
     opacity: 1;
-    transition: transform 0.34s var(--ease-butter), opacity 0.24s var(--ease-out);
-    will-change: transform, opacity;
+    transform-origin: right center;
+    /* scaleX is GPU-composited — zero layout/paint cost per frame */
+    transition: transform 0.4s var(--ease-smooth);
+    will-change: transform;
 }
 
 .participants-shell {
@@ -1014,8 +1054,9 @@ img { display: block; }
     min-width: 0;
     overflow: hidden;
     position: relative;
-    contain: layout paint;
-    transition: width 0.34s var(--ease-butter);
+    background: #0a1128;
+    /* Width snaps instantly — layout change fires once, not every frame */
+    transition: width 0s;
 }
 
 .participants-shell.hidden {
@@ -1023,13 +1064,23 @@ img { display: block; }
 }
 
 .participants-shell.hidden .participants-panel {
-    transform: translateX(10px);
-    opacity: 0;
+    transform: scaleX(0);
+    opacity: 1;
     pointer-events: none;
 }
 
-/* Hide participants panel on narrow screens */
+/* Shrink participants panel on narrower screens rather than abruptly hiding it */
 @media (max-width: 1100px) {
+    .participants-shell:not(.hidden) {
+        width: clamp(180px, 15vw, var(--right-panel-width));
+    }
+    .participants-panel {
+        width: clamp(180px, 15vw, var(--right-panel-width));
+        min-width: clamp(180px, 15vw, var(--right-panel-width));
+    }
+}
+
+@media (max-width: 700px) {
     .participants-shell { display: none; }
     .chat-main          { border-right: none; }
 }
@@ -1037,10 +1088,11 @@ img { display: block; }
 /* Participants panel header */
 .participants-header {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     padding: 0 var(--panel-pad);
-    gap: 8px;
+    gap: 4px;
     --line-inset-left: var(--panel-pad);
     --line-inset-right: var(--panel-pad);
 }
@@ -1049,8 +1101,13 @@ img { display: block; }
     display: flex;
     align-items: center;
     gap: 5px;
+    width: 100%;
     white-space: nowrap;
 }
+
+.room-stat--centered { justify-content: center; }
+.room-stat--centered .room-stat-label { font-size: 16px; }
+.room-stat--centered .room-stat-value { font-size: 14px; }
 
 .room-stat-label {
     font-size: 12px;
@@ -1064,8 +1121,8 @@ img { display: block; }
 
 /* Segmented fill bar — purely CSS, no JS */
 .room-stat-bar {
-    display: inline-block;
-    width: 52px;
+    flex: 1;
+    min-width: 30px;
     height: 8px;
     border-radius: 2px;
     border: 1px solid rgba(89, 181, 209, 0.2);

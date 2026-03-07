@@ -148,10 +148,8 @@
                     onmouseenter={showStack}
                     onmouseleave={scheduleHide}
                 >
-                    <!-- Profile circle with online status dot -->
+                    <!-- Profile circle: hover stack anchor (pfp rendered separately as persistent element) -->
                     <div class="spaces-collapsed-profile" role="group" aria-label="profile actions">
-                        <div class="spaces-collapsed-pfp"></div>
-                        <div class="activity-status online"></div>
 
                         <!--
                             Floating action stack. Animates in/out via opacity + transform.
@@ -277,17 +275,25 @@
 
     </div><!-- end .left-panel-columns -->
 
+    <!-- Persistent pfp: sits absolutely at bottom-left of left-panel, never inside
+         any scaleX transform, so it stays crisp in both collapsed and expanded states -->
+    <div class="persistent-pfp">
+        <div class="pfp-placeholder"></div>
+        <div class="activity-status online"></div>
+    </div>
+
     <!-- User bar: shown at the bottom of the left panel; hidden when collapsed -->
     <footer class="user-bar" class:in-call={activeVoiceRoom !== null}>
 
         <!-- Voice call info strip (only visible while in a voice room) -->
         {#if activeVoiceRoom !== null}
             <div class="voice-call-info">
-                <div class="voice-call-top">
-                    <div class="voice-call-status">
-                        <img src="/bars.svg" class="voice-call-icon" alt="" />
-                        <span class="voice-call-label">connected</span>
-                    </div>
+                <div class="voice-call-status">
+                    <img src="/bars.svg" class="voice-call-icon" alt="" />
+                    <span class="voice-call-label">connected</span>
+                </div>
+                <div class="voice-call-bottom">
+                    <span class="voice-call-room">{activeVoiceRoom}</span>
                     <div class="voice-call-actions">
                         <button class="voice-action-btn" title="share screen">
                             <img src="/screenshare.svg" class="voice-action-icon" alt="screen share" />
@@ -297,17 +303,12 @@
                         </button>
                     </div>
                 </div>
-                <span class="voice-call-room">{activeVoiceRoom}</span>
             </div>
             <div class="voice-call-divider"></div>
         {/if}
 
         <!-- Profile info + audio controls -->
         <div class="user-bar-main">
-            <div class="user-bar-pfp-wrapper">
-                <div class="pfp-placeholder"></div>
-                <div class="activity-status online"></div>
-            </div>
             <div class="user-bar-info">
                 <span class="user-bar-name">{username}</span>
                 <span class="user-bar-homeserver">{homeserver}</span>
@@ -367,19 +368,19 @@
                     <article class="message">
                         <div class="message-avatar"></div>
                         <div class="message-content">
+                            {#if message.repliedTo}
+                                <div class="message-reply-link">
+                                    <img src="/reply.svg" class="reply-link-icon" alt="" />
+                                    <span>{message.repliedTo}</span>
+                                </div>
+                            {/if}
                             <div class="message-meta">
                                 <span class="message-author">{message.user}</span>
                                 <span class="message-time">{message.time}</span>
                                 <button class="message-reply-btn" title="reply">
-                                    <img src="/reply.svg" class="placeholder-icon" alt="reply" />
+                                    <img src="/reply.svg" class="reply-icon" alt="reply" />
                                 </button>
                             </div>
-                            {#if message.repliedTo}
-                                <div class="message-reply-link">
-                                    <span class="reply-symbol">↪</span>
-                                    <span>{message.repliedTo}</span>
-                                </div>
-                            {/if}
                             <p class="message-text">{message.text}</p>
                             {#if message.image}
                                 <div class="message-image-placeholder" aria-label="image placeholder">
@@ -393,12 +394,12 @@
 
             <!-- Composer -->
             <footer class="chat-composer-area">
-                <div class="typing-indicator">... <span>flaxeneel2 is typing</span></div>
+                <div class="typing-indicator"> ... <span>flaxeneel2 is typing</span></div>
                 <div class="chat-composer">
                     <button class="composer-icon-btn" title="add media">
                         <img src="/attach.svg" alt="attach" class="header-empty-icon" />
                     </button>
-                    <input type="text" placeholder="enter a message..." class="chat-input" disabled />
+                    <input type="text" placeholder=" enter a message..." class="chat-input" disabled />
                     <button class="composer-send-btn" title="send">
                         <img src="/send.svg" alt="send" class="header-empty-icon" />
                     </button>
@@ -414,7 +415,7 @@
         <aside class="participants-panel">
 
             <header class="participants-header section-header-row gapped-line-bottom">
-                <div class="room-stat">
+                <div class="room-stat room-stat--centered">
                     <span class="room-stat-label">ONLINE</span>
                     <span class="room-stat-value">[ <span class="room-stat-num">72k</span> ]</span>
                 </div>
