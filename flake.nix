@@ -10,15 +10,10 @@
   outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        rust_overlay_src = builtins.fetchTarball {
-          url = "https://github.com/oxalica/rust-overlay/archive/master.tar.gz";
-          sha256 = "0yfi6r12pap2jfbbrijx65g0clmv5gw654hlgrapr5q3qjl6panc";
-        };
-
         pkgs = import nixpkgs {
           inherit system;
           overlays = [
-            (import rust_overlay_src)
+            (import rust-overlay)
           ];
           config = {
             allowUnfree = true;
@@ -75,18 +70,9 @@
             webkitgtk_4_1
             androidSdk
             emulatorScript
-            jetbrains.rust-rover
           ];
 
           shellHook = ''
-            # Rust Rover Setup
-            mkdir -p ~/.rust-rover/toolchain
-
-            ln -sfn ${rustToolchain}/lib ~/.rust-rover/toolchain
-            ln -sfn ${rustToolchain}/bin ~/.rust-rover/toolchain
-
-            export RUST_SRC_PATH="$HOME/.rust-rover/toolchain/lib/rustlib/src/rust/library"
-
             # Standard Tauri / Android paths
             export ANDROID_HOME="${androidSdk}/libexec/android-sdk"
             export NDK_HOME="$ANDROID_HOME/ndk-bundle"
