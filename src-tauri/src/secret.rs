@@ -50,7 +50,7 @@ impl SecretService {
         SnapshotPath::from_path(path)
     }
 
-    /// Generate a 32 byte random string using [getrandom]
+    /// Generate a random password of 32 alphanumeric characters, this is used for both the keyring password and the sqlite password.
     fn generate_password(&self) -> String {
         Alphanumeric.sample_string(&mut rand::rng(), 32)
     }
@@ -110,7 +110,7 @@ impl SecretService {
                 Ok(ClientStore {
                     key_provider,
                     snapshot_path,
-                    store: Option::from(store),
+                    store: Some(store),
                 })
             }
             Err(ClientError::SnapshotFileMissing(_path)) => {

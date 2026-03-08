@@ -32,11 +32,12 @@ pub fn run() {
             let client = rt.block_on(ClientHandler::new(app_handle));
             let client_state = ClientState(RwLock::new(Some(client)));
             let app_data_dir = app.path().app_data_dir()?;
+            let app_id = app.config().identifier.clone();
 
             let mut stronghold_dir = app_data_dir.clone();
             stronghold_dir.push("stronghold");
             let secret_service = SecretService::new(
-                "echelon".to_string(),
+                app_id,
                 "stronghold-key".to_string(),
                 stronghold_dir,
             );
