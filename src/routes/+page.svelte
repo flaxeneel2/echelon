@@ -105,6 +105,6 @@
       register
     </button>
 
-    <a href="/chat" class="dev-chat-link">→ open chat (dev)</a>
+    <a href="/chat" class="dev-chat-link" data-sveltekit-preload-data="off">→ open chat (dev)</a>
   </section>
 </main>

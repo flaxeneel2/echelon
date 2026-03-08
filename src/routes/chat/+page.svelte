@@ -10,6 +10,10 @@
     let collapsed: Record<string, boolean> = $state({});
     function toggleCategory(name: string) { collapsed[name] = !collapsed[name]; }
 
+    // `collapsedGroups` tracks which participant groups are folded in the right panel
+    let collapsedGroups: Record<string, boolean> = $state({});
+    function toggleGroup(name: string) { collapsedGroups[name] = !collapsedGroups[name]; }
+
     // ── Voice / audio state ───────────────────────────────────
     let muted          = $state(false);
     let deafened       = $state(false);
@@ -23,7 +27,7 @@
     // ── Collapsed-dock hover-stack visibility ─────────────────
     /*
      * The floating action stack above the profile pfp is shown on mouseenter
-     * and hidden 2 s after the last mouseleave. The timer is cancelled if the
+     * and hidden 2 s after the last mouseleave. The timer is canceled if the
      * cursor re-enters the dock zone (profile OR the stack itself) before it
      * fires. Mouse tracking is handled by a single wrapper div (.spaces-dock-zone)
      * so crossing the invisible gap between the profile and the stack never
@@ -192,7 +196,7 @@
                                 onclick={() => deafened = !deafened}
                                 title={deafened ? "undeafen" : "deafen"}
                             >
-                                <img src={deafened ? "/deafened.svg" : "/undeafened.svg"} class="spaces-hover-icon" alt="deafen" />
+                                <img src={deafened ? "/deafened.svg" : "/undeafened.svg"} class="spaces-hover-icon flip-h" alt="deafen" />
                             </button>
                         </div>
                     </div>
@@ -377,9 +381,6 @@
                             <div class="message-meta">
                                 <span class="message-author">{message.user}</span>
                                 <span class="message-time">{message.time}</span>
-                                <button class="message-reply-btn" title="reply">
-                                    <img src="/reply.svg" class="reply-icon" alt="reply" />
-                                </button>
                             </div>
                             <p class="message-text">{message.text}</p>
                             {#if message.image}
@@ -388,6 +389,9 @@
                                 </div>
                             {/if}
                         </div>
+                        <button class="message-reply-btn" title="reply">
+                            <img src="/reply.svg" class="reply-icon" alt="reply" />
+                        </button>
                     </article>
                 {/each}
             </section>
@@ -399,7 +403,7 @@
                     <button class="composer-icon-btn" title="add media">
                         <img src="/attach.svg" alt="attach" class="header-empty-icon" />
                     </button>
-                    <input type="text" placeholder=" enter a message..." class="chat-input" disabled />
+                    <textarea rows=1 wrap="hard" maxlength=8000 type="text" placeholder="enter a message..." class="chat-input"/>
                     <button class="composer-send-btn" title="send">
                         <img src="/send.svg" alt="send" class="header-empty-icon" />
                     </button>
@@ -429,16 +433,29 @@
             <section class="participants-list">
                 {#each participantGroups as group}
                     <div class="participants-group">
-                        <div class="participants-group-title">
+                        <div
+                            class="participants-group-title"
+                            role="button"
+                            tabindex="0"
+                            onclick={() => toggleGroup(group.title)}
+                            onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleGroup(group.title)}
+                        >
                             <span>{group.title}</span>
-                            <img src="/dropdown.svg" class="participants-group-arrow" alt="toggle group" />
+                            <img
+                                src="/dropdown.svg"
+                                class="participants-group-arrow"
+                                class:participants-group-arrow-collapsed={collapsedGroups[group.title]}
+                                alt="toggle group"
+                            />
                         </div>
-                        {#each group.users as member}
-                            <div class="participants-member">
-                                <img class="participants-member-icon placeholder-icon" alt="member role icon" />
-                                <span>{member}</span>
-                            </div>
-                        {/each}
+                        {#if !collapsedGroups[group.title]}
+                            {#each group.users as member}
+                                <div class="participants-member">
+                                    <div class="message-avatar"></div>
+                                    <span>{member}</span>
+                                </div>
+                            {/each}
+                        {/if}
                     </div>
                 {/each}
             </section>

@@ -246,6 +246,7 @@ button:disabled, input:disabled {
     text-decoration: none;
     letter-spacing: 0.03em;
     transition: color 0.2s;
+    background: transparent;
 }
 
 .dev-chat-link:hover {

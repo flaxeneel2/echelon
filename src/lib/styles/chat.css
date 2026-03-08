@@ -100,8 +100,11 @@ img { display: block; }
     flex-shrink: 0;
     height: 100%;
     overflow: hidden;
+    /* Width includes spaces rail + sidebar */
+    width: calc(var(--spaces-size) + (var(--spaces-inset) * 2) + var(--left-sidebar-width));
     min-width: calc(var(--spaces-size) + (var(--spaces-inset) * 2));
     position: relative;
+    transition: width 0.42s var(--ease-smooth);
 }
 
 /* Row that holds the spaces rail and sidebar side by side */
@@ -383,6 +386,10 @@ img { display: block; }
 
 /* ── Sidebar collapsed state overrides ──────────────────────── */
 
+.app-container.sidebar-collapsed .left-panel {
+    width: calc(var(--spaces-size) + (var(--spaces-inset) * 2));
+}
+
 /* Hide the regular collapse button when collapsed */
 .app-container.sidebar-collapsed .spaces-collapse-btn,
 .app-container.sidebar-collapsed .spaces-bottom-zone {
@@ -407,14 +414,11 @@ img { display: block; }
  * Same easing + near-same duration keeps the two in sync visually.
  */
 .sidebar-shell {
-    width: var(--left-sidebar-width);
-    flex-shrink: 0;
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     position: relative;
     background: #0a1128;
-    /* Width snaps instantly — layout change fires once, not every frame */
-    transition: width 0s;
 }
 
 .sidebar-container {
@@ -426,19 +430,12 @@ img { display: block; }
     flex-direction: column;
     overflow: hidden;
     opacity: 1;
-    transform-origin: left center;
-    /* scaleX is GPU-composited — zero layout/paint cost per frame */
     transition: transform 0.42s var(--ease-smooth);
     will-change: transform;
 }
 
-.app-container.sidebar-collapsed .sidebar-shell {
-    width: 0;
-}
-
 .app-container.sidebar-collapsed .sidebar-container {
-    transform: scaleX(0);
-    opacity: 1;
+    transform: translateX(-100%);
     pointer-events: none;
 }
 
@@ -454,7 +451,6 @@ img { display: block; }
     flex-shrink: 0;
     padding: 0 0 8px;
     overflow: hidden;
-    transform-origin: left center;
     transition: opacity 0.42s var(--ease-smooth), transform 0.42s var(--ease-smooth);
     will-change: transform;
 }
@@ -465,7 +461,7 @@ img { display: block; }
     right: 0;
     bottom: 0;
     opacity: 0;
-    transform: scaleX(0);
+    transform: translateX(-100%);
     pointer-events: none;
     height: 0;
     min-height: 0;
@@ -873,6 +869,14 @@ img { display: block; }
 
 .chat-header-room-name { font-size: 18px; color: #fff; }
 
+/* Icons inside header and composer buttons */
+.header-empty-icon {
+    width: 16px;
+    height: 16px;
+    filter: brightness(0) invert(1);
+    opacity: 0.7;
+}
+
 /* Small icon buttons used in the chat header and composer */
 .header-icon-btn,
 .composer-icon-btn,
@@ -902,6 +906,7 @@ img { display: block; }
 
 /* Individual message bubble */
 .message {
+    position: relative;
     display: flex;
     width: 100%;
     gap: 12px;
@@ -919,6 +924,14 @@ img { display: block; }
     border-radius: 50%;
     background: #c9ccd1;
     flex-shrink: 0;
+    /* Nudge down slightly so avatar optically aligns with the author row */
+    margin-top: 2px;
+}
+
+/* When a reply-link is present, push the avatar down past it so it stays
+   level with the author name row, not the reply citation above it */
+.message:has(.message-reply-link) .message-avatar {
+    margin-top: calc(11px * 1.2 + 5px + 2px); /* reply line-height + margins + base nudge */
 }
 
 .message-content {
@@ -958,7 +971,10 @@ img { display: block; }
 
 /* Reply button appears only when the message is hovered */
 .message-reply-btn {
-    margin-left: auto;
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
     width: 24px;
     height: 24px;
     border-radius: 6px;
@@ -1023,14 +1039,18 @@ img { display: block; }
     color: #fff;
     font-size: 14px;
     font-family: inherit;
+    margin-left: 13px;
+    resize: none;
+    overflow-y: hidden;
+    line-height: 1.4;
 }
 
 .chat-input:focus { outline: none; }
 
 /* ── Participants panel ───────────────────────────────────────── */
 /*
- * Same pattern as the sidebar: `width` slides to 0, `opacity` fades content.
- * `will-change` is omitted here too — `width` isn't composited.
+ * Same shell+slide pattern as the left sidebar: the shell transitions
+ * its own width, and the panel content slides with translateX inside it.
  */
 .participants-panel {
     width: var(--right-panel-width);
@@ -1042,8 +1062,6 @@ img { display: block; }
     flex-direction: column;
     overflow: hidden;
     opacity: 1;
-    transform-origin: right center;
-    /* scaleX is GPU-composited — zero layout/paint cost per frame */
     transition: transform 0.4s var(--ease-smooth);
     will-change: transform;
 }
@@ -1055,8 +1073,7 @@ img { display: block; }
     overflow: hidden;
     position: relative;
     background: #0a1128;
-    /* Width snaps instantly — layout change fires once, not every frame */
-    transition: width 0s;
+    transition: width 0.4s var(--ease-smooth);
 }
 
 .participants-shell.hidden {
@@ -1064,7 +1081,7 @@ img { display: block; }
 }
 
 .participants-shell.hidden .participants-panel {
-    transform: scaleX(0);
+    transform: translateX(100%);
     opacity: 1;
     pointer-events: none;
 }
@@ -1160,14 +1177,24 @@ img { display: block; }
     color: rgba(255,255,255,0.7);
     font-size: 20px;
     margin-bottom: 4px;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
 }
+
+.participants-group-title:hover { color: #fff; }
 
 .participants-group-arrow {
     width: 12px;
     height: 12px;
     filter: brightness(0) invert(1);
     opacity: 0.7;
+    transition: transform 0.22s var(--ease-out);
+    will-change: transform;
+    backface-visibility: hidden;
 }
+
+.participants-group-arrow-collapsed { transform: rotate(-90deg); }
 
 .participants-member {
     display: flex;
@@ -1181,4 +1208,3 @@ img { display: block; }
     background: rgba(45, 58, 139, 0.25);
 }
 
-.participants-member-icon { width: 14px; height: 14px; }

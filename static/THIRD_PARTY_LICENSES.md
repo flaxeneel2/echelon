@@ -102,6 +102,66 @@ This software uses icons and assets from the following resources:
 
 ---
 
+## Attach Media Icon (Lucide Icons)
+* **Source:** [circle-fading-plus](https://lucide.dev/icons/circle-fading-plus)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
+## Pin Icon (Lucide Icons)
+* **Source:** [pin](https://lucide.dev/icons/pin)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
+## Participants Icon (Lucide Icons)
+* **Source:** [users-round](https://lucide.dev/icons/users-round)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
+## Reply Icon (Lucide Icons)
+* **Source:** [reply](https://lucide.dev/icons/reply)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
+## Bars Icon (Lucide Icons)
+* **Source:** [chart-no-axes-column-increasing](https://lucide.dev/icons/chart-no-axes-column-increasing)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
+## Info Icon (Software Mansion Curved Line Icons)
+* **Source:** [Info Circle SVG Vector](https://www.svgrepo.com/svg/506223/info-circle)
+* **License** [Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)
+
+---
+
+## Screen-share Icon (Lucide Icons)
+* **Source:** [screen-share](https://lucide.dev/icons/screen-share)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
+## Video Icon (Lucide Icons)
+* **Source:** [video](https://lucide.dev/icons/video)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
+## Send Icon (Lucide Icons)
+* **Source:** [send-horizontal](https://lucide.dev/icons/send-horizontal)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
+## Reply Icon (Lucide Icons)
+* **Source:** [reply](https://lucide.dev/icons/reply)
+* **License:** [Lucide License](https://lucide.dev/license)
+
+---
+
 ## Trademark Disclaimer
 
 The logos and brand names included in this software are the property of their respective owners:
