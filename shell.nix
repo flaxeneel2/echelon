@@ -2,7 +2,7 @@ let
 
   rust_overlay_src = builtins.fetchTarball {
     url = "https://github.com/oxalica/rust-overlay/archive/master.tar.gz";
-    sha256 = "0yfi6r12pap2jfbbrijx65g0clmv5gw654hlgrapr5q3qjl6panc";
+    sha256 = "1f434r8rk5v9pi9p3dqn4lv9kqv33nf9ya3gs3l1qas06bj47g0x";
   };
 
   pkgs = import <nixpkgs> {
@@ -36,7 +36,7 @@ let
 
   androidSdk = androidComposition.androidsdk;
 
-  rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+  rustToolchain = pkgs.rust-bin.stable."1.93.0".default.override {
     extensions = [ "rust-src" "rust-analysis" "clippy" "rustfmt" "rust-analyzer" ];
     targets = [
       "aarch64-linux-android"

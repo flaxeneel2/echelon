@@ -5,7 +5,7 @@ use ruma::{OwnedRoomId};
 use ruma::api::client::space::get_hierarchy;
 use ruma::events::direct::{OwnedDirectUserIdentifier};
 use ruma::events::{AnyGlobalAccountDataEvent, GlobalAccountDataEventType, StateEventType};
-use crate::ClientState;
+use crate::{ClientState};
 use tauri::State;
 use tracing::{debug, error, trace};
 use crate::account::account_reset_types::AccountResetType;
