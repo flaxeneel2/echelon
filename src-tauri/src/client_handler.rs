@@ -21,6 +21,7 @@ use std::path::Path;
 use tauri::{AppHandle, Manager, Url};
 use tauri_plugin_opener::OpenerExt;
 use tracing::{debug, error};
+use crate::secret::Session;
 
 pub struct ClientHandler {
     matrix_client: Client,
@@ -50,7 +51,7 @@ impl ClientHandler {
         homeserver: String,
         registration_token: Option<String>,
     ) -> anyhow::Result<ClientHandler> {
-        let client: Client = self.get_new_client(&username, &homeserver).await?;
+        let client: Client = self.get_new_client(&username, &homeserver, None).await?;
 
         let mut registration_request = RegistrationRequest::new();
         registration_request.username = Some(username.clone());
@@ -118,6 +119,7 @@ impl ClientHandler {
         &self,
         username: &String,
         new_homeserver: &String,
+        sqlite_pwd: Option<String>,
     ) -> anyhow::Result<Client> {
         Ok(Client::builder()
             .homeserver_url(new_homeserver)
@@ -130,7 +132,7 @@ impl ClientHandler {
                         Url::parse(new_homeserver)?.domain().unwrap()
                     ),
                 ),
-                None,
+                sqlite_pwd.as_deref(),
             )
             .build()
             .await?)
@@ -152,7 +154,17 @@ impl ClientHandler {
         password: String,
         homeserver: String,
     ) -> anyhow::Result<Option<ClientHandler>> {
-        let new_client = self.get_new_client(&username, &homeserver).await?;
+        // Derive the full Matrix user ID so we can look up / generate the sqlite password
+        // before we even open the store, ensuring the DB is always encrypted from first open.
+        let user_id = format!(
+            "@{}:{}",
+            username,
+            Url::parse(&homeserver)?.domain().unwrap_or(&homeserver)
+        );
+        let secrets = self.app_handle.state::<SecretState>();
+        let sqlite_pwd = secrets.0.get_or_create_sqlite_pwd(&user_id)?;
+
+        let new_client = self.get_new_client(&username, &homeserver, Some(sqlite_pwd)).await?;
         new_client
             .matrix_auth()
             .login_username(&username, &password)
@@ -164,12 +176,12 @@ impl ClientHandler {
 
         // store the session tokens in stronghold
         let session_tokens = new_client.session_tokens().unwrap();
-        let secrets = self.app_handle.state::<SecretState>();
-        secrets.0.set_login_tokens(
-            new_client.user_id().unwrap().to_string(),
-            session_tokens.access_token,
-            session_tokens.refresh_token,
-        )?;
+        secrets.0.set_session(&crate::secret::Session {
+            user_id: new_client.user_id().unwrap().to_string(),
+            device_id: new_client.device_id().map(|d| d.to_string()).unwrap_or_default(),
+            access_token: session_tokens.access_token,
+            refresh_token: session_tokens.refresh_token,
+        })?;
 
         // store the new username
         let echelon_store = EchelonStore::new(&self.app_handle)?;
@@ -245,11 +257,12 @@ impl ClientHandler {
         // store the session tokens in stronghold
         let session_tokens = new_client.session_tokens().unwrap();
         let secrets = self.app_handle.state::<SecretState>();
-        secrets.0.set_login_tokens(
-            new_client.user_id().unwrap().to_string(),
-            session_tokens.access_token,
-            session_tokens.refresh_token,
-        )?;
+        secrets.0.set_session(&crate::secret::Session {
+            user_id: new_client.user_id().unwrap().to_string(),
+            device_id: new_client.device_id().map(|d| d.to_string()).unwrap_or_default(),
+            access_token: session_tokens.access_token,
+            refresh_token: session_tokens.refresh_token,
+        })?;
 
         // store the new username
         let echelon_store = EchelonStore::new(&self.app_handle)?;
@@ -269,22 +282,42 @@ impl ClientHandler {
         username: String,
         homeserver: String,
     ) -> anyhow::Result<Option<ClientHandler>> {
-        let new_client = self.get_new_client(&username, &homeserver).await?;
-        let access_token = ""; // put key here temporarily for testing
-        println!("{:?}", new_client.user_id());
-        new_client
-            .restore_session(AuthSession::Matrix(MatrixSession {
-                meta: SessionMeta {
-                    user_id: format!("@{}:{}", username, homeserver.replace("https://", ""))
-                        .parse::<OwnedUserId>()?,
-                    device_id: OwnedDeviceId::from("echelon-device".to_string()),
-                },
-                tokens: SessionTokens {
-                    access_token: access_token.parse()?,
-                    refresh_token: None,
-                },
-            }))
-            .await?;
+        let user_id = format!(
+            "@{}:{}",
+            username,
+            Url::parse(&homeserver)?.domain().unwrap_or(&homeserver)
+        );
+        let secrets = self.app_handle.state::<SecretState>();
+        let sqlite_pwd = secrets.0.get_sqlite_pwd(&user_id)?;
+
+        let new_client = self.get_new_client(&username, &homeserver, sqlite_pwd).await?;
+        match secrets.0.get_session(&*user_id) {
+            Ok(session_opt) => {
+                match session_opt {
+                    None => {
+                        error!("No session found for user, cannot restore");
+                    }
+                    Some(session) => {
+                        new_client
+                            .restore_session(AuthSession::Matrix(MatrixSession {
+                                meta: SessionMeta {
+                                    user_id: OwnedUserId::try_from(session.user_id)?,
+                                    device_id: OwnedDeviceId::try_from(session.device_id)?,
+                                },
+                                tokens: SessionTokens {
+                                    access_token: session.access_token,
+                                    refresh_token: session.refresh_token,
+                                }
+                            }))
+                            .await?
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Some other error on trying to make session: {e}");
+            }
+        }
+
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
