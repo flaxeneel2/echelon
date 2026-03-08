@@ -3,6 +3,7 @@ use blake3;
 use iota_stronghold::{ClientError, KeyProvider, SnapshotPath, Store, Stronghold};
 use keyring::{Entry, Error::NoEntry};
 use std::path::PathBuf;
+use rand::distr::{Alphanumeric, SampleString};
 
 pub struct SecretService {
     keyring_service: String,
@@ -18,11 +19,22 @@ struct ClientStore {
 
 impl SecretService {
     pub fn new(keyring_service: String, keyring_user: String, stronghold_path: PathBuf) -> Self {
+        #[cfg(target_os= "android")] {
+            Self::init_android_keyring();
+        }
         SecretService {
             keyring_service,
             keyring_user,
             stronghold_path,
         }
+    }
+
+    #[cfg(target_os = "android")]
+    fn init_android_keyring() {
+        // This connects the keyring crate to Android's Keystore/SharedPreferences
+        keyring_core::set_default_store(
+            android_native_keyring_store::AndroidStore::from_ndk_context().unwrap()
+        );
     }
 
     /// Return the path of the snapshot as a [SnapshotPath] object.
@@ -39,10 +51,8 @@ impl SecretService {
     }
 
     /// Generate a 32 byte random string using [getrandom]
-    fn generate_password(&self) -> Result<String> {
-        let mut buf = [0u8; 32];
-        getrandom::fill(&mut buf)?;
-        Ok(hex::encode(buf))
+    fn generate_password(&self) -> String {
+        Alphanumeric.sample_string(&mut rand::rng(), 32)
     }
 
     /// Access the password from the operating system's keyring and return it as a [KeyProvider].
@@ -54,7 +64,7 @@ impl SecretService {
         let keyring_password = match entry.get_password() {
             Err(NoEntry) => {
                 println!("Creating new keyring password");
-                let password = self.generate_password()?;
+                let password = self.generate_password();
                 entry.set_password(&password)?;
                 password
             }
@@ -162,7 +172,7 @@ impl SecretService {
         }
 
         if self.get_sqlite_pwd(user_id.clone())?.is_none() {
-            let password = self.generate_password()?;
+            let password = self.generate_password();
             store.insert(b"sqlite_password".to_vec(), Vec::from(password), None)?;
         }
 
@@ -223,7 +233,7 @@ impl SecretService {
     /// * `user_id`: The Matrix account's userid in the format of `@username:homeserver`.
     fn set_sqlite_pwd(&self, user_id: String) -> Result<()> {
         let stronghold = Stronghold::default();
-        let password = self.generate_password()?;
+        let password = self.generate_password();
         let client_store = self.get_client_store(&user_id, &stronghold)?;
         let store = client_store.store.unwrap();
 
