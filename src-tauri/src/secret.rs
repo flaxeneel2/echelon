@@ -3,8 +3,8 @@ use blake3;
 use iota_stronghold::{ClientError, KeyProvider, SnapshotPath, Stronghold};
 use rand::distr::{Alphanumeric, SampleString};
 use std::path::PathBuf;
-use keyring_core::{Entry, Error as KeyringError};
-use tracing::log::error;
+
+use crate::keyring_client::KeyringClient;
 
 /// All per-user session data stored in the stronghold.
 pub struct Session {
@@ -15,17 +15,15 @@ pub struct Session {
 }
 
 pub struct SecretService {
-    /// Identifies this app in the OS keyring (e.g. the Tauri app identifier).
-    keyring_service: String,
-    /// The keyring account name under which the stronghold encryption key is stored.
-    keyring_user: String,
+    /// Shared keyring client for fetching/creating the stronghold encryption key.
+    keyring: KeyringClient,
     /// Directory where per-user stronghold snapshot files are kept.
     stronghold_path: PathBuf,
 }
 
 impl SecretService {
-    pub fn new(keyring_service: String, keyring_user: String, stronghold_path: PathBuf) -> Self {
-        SecretService { keyring_service, keyring_user, stronghold_path }
+    pub fn new(keyring: KeyringClient, stronghold_path: PathBuf) -> Self {
+        SecretService { keyring, stronghold_path }
     }
 
     /// Generate a random 32-character alphanumeric string.
@@ -33,32 +31,22 @@ impl SecretService {
         Alphanumeric.sample_string(&mut rand::rng(), 32)
     }
 
-    /// Return the snapshot path for `user_id` (blake3-hashed to be FS-safe).
-    fn snapshot_path(&self, user_id: &str) -> SnapshotPath {
-        let name = blake3::hash(user_id.as_bytes()).to_string();
-        SnapshotPath::from_path(self.stronghold_path.join(name))
+    /// Return the blake3 hex hash of `user_id`, used as both the keyring account
+    /// name and the stronghold snapshot filename so each user has isolated secrets.
+    fn user_id_hash(user_id: &str) -> String {
+        blake3::hash(user_id.as_bytes()).to_string()
     }
 
-    /// Fetch (or lazily create) the stronghold encryption key from the OS keyring.
-    fn key_provider(&self) -> Result<KeyProvider> {
-        let entry = Entry::new(&self.keyring_service, &self.keyring_user)?;
-        let password = match entry.get_password() {
-            Ok(p) => p,
-            Err(e) => {
-                match e {
-                    KeyringError::NoEntry => {
-                        let p = self.random_secret();
-                        entry.set_password(&p)?;
-                        p
-                    }
-                    _ => {
-                        error!("Failed to get password from keyring: {:?}", e);
-                        return Err(anyhow::anyhow!("Failed to get password from keyring"));
-                    }
-                }
-            }
-        };
-        Ok(KeyProvider::with_passphrase_hashed_blake2b(password)?)
+    /// Return the snapshot path for `user_id` (blake3-hashed to be FS-safe).
+    fn snapshot_path(&self, user_id: &str) -> SnapshotPath {
+        SnapshotPath::from_path(self.stronghold_path.join(Self::user_id_hash(user_id)))
+    }
+
+    /// Fetch (or lazily create) the per-user stronghold encryption key from the OS keyring.
+    /// The keyring account name is the blake3 hash of `user_id`, giving each user
+    /// their own isolated keyring entry.
+    fn key_provider(&self, user_id: &str) -> Result<KeyProvider> {
+        self.keyring.key_provider(&Self::user_id_hash(user_id))
     }
 
     /// Open the stronghold store for `user_id`.
@@ -70,7 +58,7 @@ impl SecretService {
         user_id: &str,
         create_if_missing: bool,
     ) -> Result<Option<(Stronghold, iota_stronghold::Store, KeyProvider, SnapshotPath)>> {
-        let key_provider = self.key_provider()?;
+        let key_provider = self.key_provider(user_id)?;
         let snapshot_path = self.snapshot_path(user_id);
         let stronghold = Stronghold::default();
 
