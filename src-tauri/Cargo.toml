@@ -42,7 +42,7 @@ keyring-core = "0.7.4"
 
 # Desktop-specific secure storage, apple-native also deals with ios
 [target.'cfg(not(target_os = "android"))'.dependencies]
-keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
+keyring = { version = "4.0.0-beta.3" }
 
 # Android-specific secure storage.
 [target.'cfg(target_os = "android")'.dependencies]
