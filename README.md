@@ -11,7 +11,7 @@ Currently, this is just a personal project with some uni friends, but we are alw
 ### Pre requisites
 
 - Rust
-- Bun (Nodejs probably works too, but we use bun for development)
+- Bun (Node.js probably works too, but we use bun for development)
 - Android studio with android SDK 35. (if you plan on building for android)
 - Xcode (if you plan on building for macOS/iOS)
 
@@ -24,6 +24,7 @@ Alternatively, you can use the provided direnv to automatically enable the envir
 Ensure this is inside your configuration.nix:
 
 ```nix
+{
   # Allows the direnv manager to always be available
   programs.direnv = {
     enable = true;
@@ -33,6 +34,7 @@ Ensure this is inside your configuration.nix:
     enableBashIntegration = true;
     enableZshIntegration = true;
   };
+}
 ```
 
 Then restart your terminal, and cd into the project directory and enable direnv by using the command it displays and the environment should work!
@@ -45,7 +47,7 @@ To install dependencies, run:
 bun install
 ```
 
-### Building for Desktop
+### Development and Building for Desktop
 
 To build for desktop, run:
 
@@ -53,9 +55,51 @@ To build for desktop, run:
 bun run tauri build
 ```
 
-### Building for Android
+### Development and Building for Android
 
-NOTE: ANDROID BUILDS ARE BROKEN FOR NOW (on nix at least, no android 36 for now, on stable)
+#### Linux Devices 
+To run the app via an Android emulator, first run the following to start the emulator:
+
+```bash
+run-test-emulator
+```
+
+Then, to run the application in the emulator:
+
+```bash
+bun run tauri android dev
+```
+
+We recommend using an Android device if 
+your hardware acceleration is broken for the Android SDK on Linux,
+
+To do so, you need to follow the following steps on your device:
+1. Go to Settings > About Phone.
+
+2. Tap Build Number 7 times until it says "You are now a developer."
+
+3. Go to Settings > System > Developer Options.
+
+4. Enable USB Debugging.
+
+on NixOS, you need to add this to your config:
+
+```nix
+{
+    programs.adb.enable = true;
+    users.users.YOURUSERNAMEHERE.extraGroups = [ "adbusers" ];
+}
+```
+
+On non-NixOS systems, you need to ensure your user is in the adbusers group, and you have the
+correct udev rules implemented.
+
+On Windows, you should not have any issues (hopefully), but it has not been tested yet.
+
+To run in a dev environment, run the command:
+```bash
+bun run tauri android dev --host 127.0.0.1
+```
 
 To build for android, run:
 
