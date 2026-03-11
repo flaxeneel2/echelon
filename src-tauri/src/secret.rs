@@ -1,9 +1,10 @@
 use anyhow::Result;
 use blake3;
 use iota_stronghold::{ClientError, KeyProvider, SnapshotPath, Stronghold};
-use keyring::{Entry, Error::NoEntry};
 use rand::distr::{Alphanumeric, SampleString};
 use std::path::PathBuf;
+use keyring_core::{Entry, Error as KeyringError};
+use tracing::log::error;
 
 /// All per-user session data stored in the stronghold.
 pub struct Session {
@@ -24,13 +25,6 @@ pub struct SecretService {
 
 impl SecretService {
     pub fn new(keyring_service: String, keyring_user: String, stronghold_path: PathBuf) -> Self {
-        #[cfg(target_os = "android")]
-        {
-            keyring_core::set_default_store(
-                android_native_keyring_store::AndroidStore::from_ndk_context()
-                    .expect("failed to initialise Android keystore"),
-            );
-        }
         SecretService { keyring_service, keyring_user, stronghold_path }
     }
 
@@ -50,12 +44,19 @@ impl SecretService {
         let entry = Entry::new(&self.keyring_service, &self.keyring_user)?;
         let password = match entry.get_password() {
             Ok(p) => p,
-            Err(NoEntry) => {
-                let p = self.random_secret();
-                entry.set_password(&p)?;
-                p
+            Err(e) => {
+                match e {
+                    KeyringError::NoEntry => {
+                        let p = self.random_secret();
+                        entry.set_password(&p)?;
+                        p
+                    }
+                    _ => {
+                        error!("Failed to get password from keyring: {:?}", e);
+                        return Err(anyhow::anyhow!("Failed to get password from keyring"));
+                    }
+                }
             }
-            Err(e) => return Err(e.into()),
         };
         Ok(KeyProvider::with_passphrase_hashed_blake2b(password)?)
     }

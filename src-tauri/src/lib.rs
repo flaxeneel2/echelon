@@ -5,6 +5,7 @@ use crate::user::{
 use tauri::Manager;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
+
 mod account;
 mod client_handler;
 mod events;
@@ -23,10 +24,36 @@ pub struct SecretState(SecretService);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+
+            #[cfg(target_os = "android")]
+            {
+                use tracing_subscriber::util::SubscriberInitExt;
+                use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+
+                keyring::use_native_store(false)?;
+
+                let app_id = app.config().identifier.clone();
+                let android_layer = tracing_android::layer(&app_id)
+                    .expect("Failed to create android tracing layer");
+
+                let fmt_layer = tracing_subscriber::fmt::layer()
+                    .with_ansi(true)
+                    .with_target(true)
+                    .with_thread_ids(true)
+                    .with_writer(std::io::stdout);
+
+                tracing_subscriber::registry()
+                    .with(android_layer)
+                    .with(fmt_layer)
+                    .with(tracing_subscriber::filter::LevelFilter::DEBUG)
+                    .init();
+            }
+
             let rt = Runtime::new().expect("failed to create runtime");
             let app_handle = app.handle().clone();
             let client = rt.block_on(ClientHandler::new(app_handle));
