@@ -2,7 +2,7 @@ use crate::account::account_reset_types::AccountResetType;
 use crate::events::client_events::ClientEvents;
 use crate::sync_manager::SyncManager;
 use crate::SecretState;
-use crate::store::EchelonStore;
+use crate::StoreState;
 use matrix_sdk::authentication::matrix::MatrixSession;
 use matrix_sdk::authentication::oauth::registration::{
     ApplicationType, ClientMetadata, Localized, OAuthGrantType,
@@ -184,8 +184,8 @@ impl ClientHandler {
         })?;
 
         // store the new username
-        let echelon_store = EchelonStore::new(&self.app_handle)?;
-        echelon_store.add_account(&new_client.user_id().unwrap().to_string())?;
+        let echelon_store = self.app_handle.state::<StoreState>();
+        echelon_store.0.add_account(&new_client.user_id().unwrap().to_string())?;
 
         Ok(Some(ClientHandler {
             matrix_client: new_client,
@@ -265,8 +265,8 @@ impl ClientHandler {
         })?;
 
         // store the new username
-        let echelon_store = EchelonStore::new(&self.app_handle)?;
-        echelon_store.add_account(&new_client.user_id().unwrap().to_string())?;
+        let echelon_store = self.app_handle.state::<StoreState>();
+        echelon_store.0.add_account(&new_client.user_id().unwrap().to_string())?;
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
