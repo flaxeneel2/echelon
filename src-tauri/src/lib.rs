@@ -9,18 +9,22 @@ use tokio::sync::RwLock;
 mod account;
 mod client_handler;
 mod events;
+mod keyring_client;
 mod rooms;
 mod secret;
 mod spaces;
+mod store;
 mod sync_manager;
 mod user;
-mod store;
 
 use client_handler::ClientHandler;
+use keyring_client::KeyringClient;
 use secret::SecretService;
+use store::EchelonStore;
 
 pub struct ClientState(pub RwLock<Option<ClientHandler>>);
 pub struct SecretState(SecretService);
+pub struct StoreState(EchelonStore);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,12 +34,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
 
+            keyring::use_native_store(true)?;
+
             #[cfg(target_os = "android")]
             {
                 use tracing_subscriber::util::SubscriberInitExt;
                 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
-
-                keyring::use_native_store(false)?;
 
                 let app_id = app.config().identifier.clone();
                 let android_layer = tracing_android::layer(&app_id)
@@ -63,15 +67,27 @@ pub fn run() {
 
             let mut stronghold_dir = app_data_dir.clone();
             stronghold_dir.push("stronghold");
+
+            // Per-user session secrets – each user gets their own keyring entry
+            // (keyed by blake3 hash of their user_id) and stronghold snapshot.
             let secret_service = SecretService::new(
-                app_id,
-                "stronghold-key".to_string(),
+                KeyringClient::new(app_id.clone()),
+                stronghold_dir.clone(),
+            );
+
+            // App-level store (account list, etc.)
+            let echelon_store = EchelonStore::new(
+                KeyringClient::new(app_id),
+                "store-key".to_string(),
                 stronghold_dir,
             );
+
             let secret_state = SecretState(secret_service);
+            let store_state = StoreState(echelon_store);
 
             app.manage(client_state);
             app.manage(secret_state);
+            app.manage(store_state);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
