@@ -32,7 +32,7 @@ impl EchelonStore {
     pub fn new(keyring: KeyringClient, keyring_account: String, store_dir: PathBuf) -> Self {
         // Hash the keyring_account string to get a stable, FS-safe filename.
         let name = blake3::hash(keyring_account.as_bytes()).to_string();
-        let snapshot_path = SnapshotPath::from_path(store_dir.join(format!("{name}.stronghold")));
+        let snapshot_path = SnapshotPath::from_path(store_dir.join(format!("{name}")));
         EchelonStore { keyring, keyring_account, snapshot_path }
     }
 

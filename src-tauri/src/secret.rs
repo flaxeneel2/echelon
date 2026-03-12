@@ -1,10 +1,9 @@
+use crate::keyring_client::KeyringClient;
 use anyhow::Result;
 use blake3;
 use iota_stronghold::{ClientError, KeyProvider, SnapshotPath, Stronghold};
 use rand::distr::{Alphanumeric, SampleString};
 use std::path::PathBuf;
-
-use crate::keyring_client::KeyringClient;
 
 /// All per-user session data stored in the stronghold.
 pub struct Session {
@@ -33,7 +32,7 @@ impl SecretService {
 
     /// Return the blake3 hex hash of `user_id`, used as both the keyring account
     /// name and the stronghold snapshot filename so each user has isolated secrets.
-    fn user_id_hash(user_id: &str) -> String {
+    pub fn user_id_hash(user_id: &str) -> String {
         blake3::hash(user_id.as_bytes()).to_string()
     }
 

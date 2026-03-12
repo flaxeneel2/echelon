@@ -21,7 +21,7 @@ use std::path::Path;
 use tauri::{AppHandle, Manager, Url};
 use tauri_plugin_opener::OpenerExt;
 use tracing::{debug, error};
-use crate::secret::Session;
+use crate::secret::{SecretService, Session};
 
 pub struct ClientHandler {
     matrix_client: Client,
@@ -125,12 +125,12 @@ impl ClientHandler {
             .homeserver_url(new_homeserver)
             .sqlite_store(
                 Path::join(
-                    &self.app_handle.path().app_data_dir()?,
-                    format!(
-                        "{}_{}_data",
+                    &self.app_handle.path().app_data_dir()?.join("accounts"),
+                    SecretService::user_id_hash(&format!(
+                        "@{}:{}",
                         username,
                         Url::parse(new_homeserver)?.domain().unwrap()
-                    ),
+                    )),
                 ),
                 sqlite_pwd.as_deref(),
             )
