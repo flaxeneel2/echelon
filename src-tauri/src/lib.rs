@@ -68,7 +68,7 @@ pub fn run() {
             let mut stronghold_dir = app_data_dir.clone();
             stronghold_dir.push("stronghold");
 
-            // Per-user session secrets – each user gets their own keyring entry
+            // Per-user session secrets: each user gets their own keyring entry
             // (keyed by blake3 hash of their user_id) and stronghold snapshot.
             let secret_service = SecretService::new(
                 KeyringClient::new(app_id.clone()),
