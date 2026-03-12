@@ -176,7 +176,7 @@ impl ClientHandler {
 
         // store the session tokens in stronghold
         let session_tokens = new_client.session_tokens().unwrap();
-        secrets.0.set_session(&crate::secret::Session {
+        secrets.0.set_session(&Session {
             user_id: new_client.user_id().unwrap().to_string(),
             device_id: new_client.device_id().map(|d| d.to_string()).unwrap_or_default(),
             access_token: session_tokens.access_token,
@@ -257,7 +257,7 @@ impl ClientHandler {
         // store the session tokens in stronghold
         let session_tokens = new_client.session_tokens().unwrap();
         let secrets = self.app_handle.state::<SecretState>();
-        secrets.0.set_session(&crate::secret::Session {
+        secrets.0.set_session(&Session {
             user_id: new_client.user_id().unwrap().to_string(),
             device_id: new_client.device_id().map(|d| d.to_string()).unwrap_or_default(),
             access_token: session_tokens.access_token,
