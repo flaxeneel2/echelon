@@ -28,9 +28,9 @@ body {
 
 .title {
     color: #59B5D1;
-    font-size: 64px;
+    font-size: 4rem;
     font-weight: normal;
-    margin: 0 0 40px 0;
+    margin: 0 0 2.5rem 0;
 }
 
 .input-group {
@@ -38,25 +38,25 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 12px;
+    gap: 0.75rem;
 }
 .input {
     width: 100%;
     background: #080a28;
-    border: 2px solid transparent;
-    padding: 14px 18px;
+    border: 0.125rem solid transparent;
+    padding: 0.875rem 1.125rem;
     color: #FFFFFF;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 16px;
+    font-size: 1rem;
     box-sizing: border-box;
-    border-radius: 20px 0 20px 0;
+    border-radius: 1.25rem 0 1.25rem 0;
     outline: none;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .input:focus {
     border-color: #59B5D1;
-    box-shadow: 0 0 10px rgba(89, 181, 209, 0.2);
+    box-shadow: 0 0 0.625rem rgba(89, 181, 209, 0.2);
 }
 
 .input::placeholder {
@@ -76,12 +76,12 @@ body {
 }
 
 .password-wrapper .input {
-    padding-right: 48px;
+    padding-right: 3rem;
 }
 
 .password-toggle {
     position: absolute;
-    right: 14px;
+    right: 0.875rem;
     background: none;
     border: none;
     padding: 0;
@@ -97,8 +97,8 @@ body {
 }
 
 .password-toggle .icon-svg {
-    width: 18px;
-    height: 18px;
+    width: 1.125rem;
+    height: 1.125rem;
     display: block;
     filter: brightness(0) saturate(100%) invert(84%) sepia(19%) saturate(1074%) hue-rotate(156deg) brightness(91%) contrast(85%);
 }
@@ -109,22 +109,22 @@ body {
     background: #180865;
     overflow: hidden;
     display: flex;
-    border-radius: 20px 0 20px 0;
-    border: 2px solid transparent;
+    border-radius: 1.25rem 0 1.25rem 0;
+    border: 0.125rem solid transparent;
     box-sizing: border-box;
     transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .homeserver-wrapper:focus-within {
     border-color: #59B5D1;
-    box-shadow: 0 0 10px rgba(89, 181, 209, 0.2);
+    box-shadow: 0 0 0.625rem rgba(89, 181, 209, 0.2);
 }
 
 .homeserver-wrapper input {
     background: transparent;
     width: 100%;
     border: none;
-    padding: 14px 18px;
+    padding: 0.875rem 1.125rem;
     color: #FFFFFF;
     font-family: 'JetBrains Mono', monospace;
     outline: none;
@@ -141,7 +141,7 @@ body {
 
 .info-icon-wrapper {
     position: absolute;
-    right: 15px;
+    right: 0.9375rem;
     top: 50%;
     transform: translateY(-50%);
     display: flex;
@@ -149,8 +149,8 @@ body {
 }
 
 .info-icon-wrapper .icon-svg {
-    width: 18px;
-    height: 18px;
+    width: 1.125rem;
+    height: 1.125rem;
     display: block;
     filter: brightness(0) saturate(100%) invert(84%) sepia(19%) saturate(1074%) hue-rotate(156deg) brightness(91%) contrast(85%);
 }
@@ -158,7 +158,7 @@ body {
 .forgot-link {
     color: #40529F;
     text-decoration: none;
-    font-size: 16px;
+    font-size: 1rem;
     margin-bottom: 0.5vh;
     transition: color 0.2s;
 }
@@ -171,22 +171,22 @@ body {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 0.75rem;
     align-items: center;
 }
 
 .button, .register-button {
     width: 15vw;
-    padding: 12px;
+    padding: 0.75rem;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 16px;
+    font-size: 1rem;
     transition: all 0.2s ease-in-out;
     box-sizing: border-box;
     text-align: center;
     background: #0C103B;
     color: rgba(255, 255, 255, 0.55);
-    border: 2px solid #291c6c;
-    border-radius: 20px 0 20px 0;
+    border: 0.125rem solid #291c6c;
+    border-radius: 1.25rem 0 1.25rem 0;
 }
 
 .register-button {
@@ -195,21 +195,21 @@ body {
 }
 
 .button:hover, .register-button:hover {
-    border: 2px solid #005181;
+    border: 0.125rem solid #005181;
 }
 
 .oauth-icons {
     display: flex;
-    gap: 20px;
-    margin: 30px 0;
+    gap: 1.25rem;
+    margin: 1.875rem 0;
 }
 
 .oauth-icon {
     background: none;
     border: none;
     padding: 0;
-    width: 28px;
-    height: 28px;
+    width: 1.75rem;
+    height: 1.75rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -218,20 +218,20 @@ body {
 }
 
 .oauth-icon:hover {
-    transform: translateY(-2px);
+    transform: translateY(-0.125rem);
 }
 
 .oauth-icon .icon-svg {
-    width: 28px;
-    height: 28px;
+    width: 1.75rem;
+    height: 1.75rem;
     filter: brightness(0) saturate(100%) invert(84%) sepia(19%) saturate(1074%) hue-rotate(156deg) brightness(91%) contrast(85%);
     display: block;
 }
 
 .error-msg {
     color: #ff5555;
-    font-size: 14px;
-    margin: 10px 0;
+    font-size: 0.875rem;
+    margin: 0.625rem 0;
 }
 
 button:disabled, input:disabled {
@@ -240,8 +240,8 @@ button:disabled, input:disabled {
 }
 
 .dev-chat-link {
-    margin-top: 16px;
-    font-size: 13px;
+    margin-top: 1rem;
+    font-size: 0.8125rem;
     color: rgba(89, 181, 209, 0.45);
     text-decoration: none;
     letter-spacing: 0.03em;
