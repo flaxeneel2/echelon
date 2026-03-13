@@ -26,7 +26,7 @@ impl SecretService {
     }
 
     /// Generate a random 32-character alphanumeric string.
-    fn random_secret(&self) -> String {
+    pub fn random_secret() -> String {
         Alphanumeric.sample_string(&mut rand::rng(), 32)
     }
 
@@ -137,7 +137,7 @@ impl SecretService {
 
         // Generate a sqlite password on first login and never overwrite it.
         if store.get(b"sqlite_password")?.is_none() {
-            let pwd = self.random_secret();
+            let pwd = Self::random_secret();
             store.insert(b"sqlite_password".to_vec(), pwd.into_bytes(), None)?;
         }
 
@@ -210,7 +210,7 @@ impl SecretService {
             return Ok(String::from_utf8(bytes)?);
         }
 
-        let pwd = self.random_secret();
+        let pwd = Self::random_secret();
         store.insert(b"sqlite_password".to_vec(), pwd.clone().into_bytes(), None)?;
         self.commit(&stronghold, &key_provider, &snapshot_path)?;
         Ok(pwd)

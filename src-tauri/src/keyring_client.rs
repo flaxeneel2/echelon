@@ -1,8 +1,8 @@
 use anyhow::Result;
 use iota_stronghold::KeyProvider;
 use keyring_core::{Entry, Error as KeyringError};
-use rand::distr::{Alphanumeric, SampleString};
 use tracing::error;
+use crate::secret::SecretService;
 
 /// Abstracts OS-keyring access for both [crate::secret::SecretService] and
 /// [crate::store::EchelonStore].
@@ -14,11 +14,6 @@ pub struct KeyringClient {
 impl KeyringClient {
     pub fn new(service: String) -> Self {
         KeyringClient { service }
-    }
-
-    /// Generate a random 32-character alphanumeric string.
-    fn random_secret() -> String {
-        Alphanumeric.sample_string(&mut rand::rng(), 32)
     }
 
     /// Retrieve the raw password stored in the keyring under `account`.
@@ -33,7 +28,7 @@ impl KeyringClient {
         match entry.get_password() {
             Ok(p) => Ok(p),
             Err(KeyringError::NoEntry) => {
-                let p = Self::random_secret();
+                let p = SecretService::random_secret();
                 entry.set_password(&p)?;
                 Ok(p)
             }
