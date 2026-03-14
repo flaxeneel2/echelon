@@ -41,7 +41,7 @@
 
         androidSdk = androidComposition.androidsdk;
 
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+        rustToolchain = pkgs.rust-bin.stable."1.93.0".default.override {
           extensions = [ "rust-src" "rust-analysis" "clippy" "rustfmt" "rust-analyzer" ];
           targets = [
             "aarch64-linux-android"
