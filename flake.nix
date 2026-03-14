@@ -73,36 +73,24 @@
           ];
 
           shellHook = ''
-            # 1. Environment Paths
+            # Android and Java Paths
             export ANDROID_HOME="${androidSdk}/libexec/android-sdk"
             export NDK_HOME="$ANDROID_HOME/ndk-bundle"
             export JAVA_HOME="${pkgs.zulu.home}"
             export XDG_DATA_DIRS="$GSETTINGS_SCHEMAS_PATH"
 
-            # 2. Linux/Tauri Fixes
+            # Exports the android build tools to path
+            export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+
+            # Disables the DMA-BUF renderer in webkit
+            # It causes crashes/weird behaviour otherwise
             export WEBKIT_DISABLE_DMABUF_RENDERER=1
 
-            # 3. Gradle System Options
-            export GRADLE_OPTS="-Dorg.gradle.project.android.sdk.channel=0 -Dorg.gradle.project.android.builder.sdkDownload=false"
-            
-            # 4. Declarative AAPT2 Sync
-            # Injects the Nix store path directly into gradle.properties to ensure 
-            # AGP worker daemons use the patched binary.
-            PROP_FILE="src-tauri/gen/android/gradle.properties"
-            AAPT2_NIX_PATH="${androidSdk}/libexec/android-sdk/build-tools/35.0.0/aapt2"
-
-            if [ -f "$PROP_FILE" ]; then
-              # Remove existing override and ensure file ends with a newline
-              sed -i '/android.aapt2FromMavenOverride/d' "$PROP_FILE"
-              sed -i '$a\' "$PROP_FILE"
-              
-              # Append the current Nix store path
-              echo "android.aapt2FromMavenOverride=$AAPT2_NIX_PATH" >> "$PROP_FILE"
-              echo "Synced AAPT2: $PROP_FILE"
-            fi
-
-            # 5. Path Update
-            export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+            # Exports Gradle System Options
+            # Below does two important things:
+            # 1. Stops gradle from trying to download its own tools
+            # 2. Forces gradle to use the nix version of aapt2, so nix does not crash out
+            export GRADLE_OPTS="-Dorg.gradle.project.android.sdk.channel=0 -Dorg.gradle.project.android.builder.sdkDownload=false -Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/35.0.0/aapt2"
           '';
         };
       }

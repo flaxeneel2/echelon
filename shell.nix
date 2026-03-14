@@ -67,23 +67,23 @@ pkgs.mkShell {
   ];
 
   shellHook = ''
-    # Standard Tauri / Android paths
+    # Android and Java Paths
     export ANDROID_HOME="${androidSdk}/libexec/android-sdk"
     export NDK_HOME="$ANDROID_HOME/ndk-bundle"
     export JAVA_HOME="${pkgs.zulu.home}"
     export XDG_DATA_DIRS="$GSETTINGS_SCHEMAS_PATH"
 
-    # Fix for WebKitGTK/Wayland crashes without disabling Wayland entirely
-    export WEBKIT_DISABLE_DMABUF_RENDERER=1
-
-    # Telling it to look at the sdk we installed up above
-    export GRADLE_OPTS="-Dorg.gradle.project.android.sdk.channel=0"
-    export GRADLE_OPTS="$GRADLE_OPTS -Dorg.gradle.project.android.builder.sdkDownload=false"
+    # Exports the android build tools to path
     export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
 
-    echo "--- Tauri Android Environment ---"
-    echo "Declarative emulator ready."
-    echo "To start the emulator, simply run: run-test-emulator"
-    echo "---------------------------------"
+    # Disables the DMA-BUF renderer in webkit
+    # It causes crashes/weird behaviour otherwise
+    export WEBKIT_DISABLE_DMABUF_RENDERER=1
+
+    # Exports Gradle System Options
+    # Below does two important things:
+    # 1. Stops gradle from trying to download its own tools
+    # 2. Forces gradle to use the nix version of aapt2, so nix does not crash out
+    export GRADLE_OPTS="-Dorg.gradle.project.android.sdk.channel=0 -Dorg.gradle.project.android.builder.sdkDownload=false -Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/35.0.0/aapt2"
   '';
 }
