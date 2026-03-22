@@ -17,12 +17,13 @@ let
 
   # Tauri seems to default to min sdk 24 so this will work for all versions from android 7 onwards
   platformVersion = "36";
+  buildToolsVersion = "35.0.0";
 
   androidComposition = pkgs.androidenv.composeAndroidPackages {
     includeNDK = true;
     platformVersions = [ platformVersion ];
     abiVersions = [ "x86_64" "arm64-v8a" ];
-    buildToolsVersions = [ "35.0.0" ];
+    buildToolsVersions = [ buildToolsVersion ];
     includeSystemImages = true;
     systemImageTypes = [ "google_apis" ];
   };
@@ -74,7 +75,7 @@ pkgs.mkShell {
     export XDG_DATA_DIRS="$GSETTINGS_SCHEMAS_PATH"
 
     # Exports the android build tools to path
-    export PATH="$ANDROID_HOME/build-tools/35.0.0:$PATH"
+    export PATH="$ANDROID_HOME/build-tools/${buildToolsVersion}:$PATH"
 
     # Disables the DMA-BUF renderer in webkit
     # It causes crashes/weird behaviour otherwise
@@ -84,6 +85,6 @@ pkgs.mkShell {
     # Below does two important things:
     # 1. Stops gradle from trying to download its own tools
     # 2. Forces gradle to use the nix version of aapt2, so nix does not crash out
-    export GRADLE_OPTS="-Dorg.gradle.project.android.sdk.channel=0 -Dorg.gradle.project.android.builder.sdkDownload=false -Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/35.0.0/aapt2"
+    export GRADLE_OPTS="-Dorg.gradle.project.android.sdk.channel=0 -Dorg.gradle.project.android.builder.sdkDownload=false -Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/aapt2"
   '';
 }
