@@ -123,7 +123,9 @@ impl SecretService {
     /// Returns `Ok(())` on success.
     pub fn set_session(&self, session: &Session) -> Result<()> {
         let (stronghold, store, key_provider, snapshot_path) =
-            self.open_store(&session.user_id, true)?.unwrap();
+            self
+                .open_store(&session.user_id, true)?
+                .ok_or_else(|| anyhow::anyhow!("Failed to open user stronghold store"))?;
 
         store.insert(b"user_id".to_vec(), session.user_id.as_bytes().to_vec(), None)?;
         store.insert(b"device_id".to_vec(), session.device_id.as_bytes().to_vec(), None)?;
@@ -204,7 +206,9 @@ impl SecretService {
     ///
     pub fn get_or_create_sqlite_pwd(&self, user_id: &str) -> Result<String> {
         let (stronghold, store, key_provider, snapshot_path) =
-            self.open_store(user_id, true)?.unwrap();
+            self
+                .open_store(user_id, true)?
+                .ok_or_else(|| anyhow::anyhow!("Failed to open user stronghold store"))?;
 
         if let Some(bytes) = store.get(b"sqlite_password")? {
             return Ok(String::from_utf8(bytes)?);

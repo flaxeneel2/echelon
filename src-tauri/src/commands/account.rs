@@ -22,7 +22,9 @@ pub async fn reset_account(
     // Call reset_account in a separate scope so the read lock is dropped promptly.
     let result = {
         let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
+        let Some(client_handler) = state_r.as_ref() else {
+            return Err("No active client session".to_string());
+        };
         client_handler
             .reset_account(account_reset_type, password, key_backup)
             .await

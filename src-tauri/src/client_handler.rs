@@ -30,14 +30,14 @@ pub struct ClientHandler {
 }
 
 impl ClientHandler {
-    pub async fn new(app_handle: AppHandle) -> Self {
-        ClientHandler {
-            matrix_client: Client::new("https://matrix.org".parse().unwrap())
-                .await
-                .expect("Failed to create Matrix client"),
+    pub async fn new(app_handle: AppHandle) -> anyhow::Result<Self> {
+        let homeserver: Url = Url::parse("https://matrix.org")?;
+        let matrix_client = Client::new(homeserver).await?;
+        Ok(ClientHandler {
+            matrix_client,
             sync_manager: SyncManager::new(),
             app_handle,
-        }
+        })
     }
 
     pub fn get_client(&self) -> &Client {
@@ -82,7 +82,10 @@ impl ClientHandler {
                     let session = uiaa_info.session.clone();
                     debug!("Received UIAA response with session: {:?}", session);
 
-                    let mut reg_token = RegistrationToken::new(registration_token.unwrap());
+                    let token = registration_token.ok_or_else(|| {
+                        anyhow::anyhow!("Registration token required for UIAA challenge-response")
+                    })?;
+                    let mut reg_token = RegistrationToken::new(token);
                     reg_token.session = session;
                     let auth_data = AuthData::RegistrationToken(reg_token);
                     registration_request.auth = Some(auth_data);
@@ -129,7 +132,9 @@ impl ClientHandler {
                     SecretService::user_id_hash(&format!(
                         "@{}:{}",
                         username,
-                        Url::parse(new_homeserver)?.domain().unwrap()
+                        Url::parse(new_homeserver)?
+                            .domain()
+                            .ok_or_else(|| anyhow::anyhow!("Invalid homeserver domain"))?
                     )),
                 ),
                 sqlite_pwd.as_deref(),
@@ -175,9 +180,15 @@ impl ClientHandler {
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
         // store the session tokens in stronghold
-        let session_tokens = new_client.session_tokens().unwrap();
+        let session_tokens = new_client
+            .session_tokens()
+            .ok_or_else(|| anyhow::anyhow!("Missing session tokens after login"))?;
+        let user_id = new_client
+            .user_id()
+            .ok_or_else(|| anyhow::anyhow!("Missing user_id after login"))?
+            .to_string();
         secrets.0.set_session(&Session {
-            user_id: new_client.user_id().unwrap().to_string(),
+            user_id: user_id.clone(),
             device_id: new_client.device_id().map(|d| d.to_string()).unwrap_or_default(),
             access_token: session_tokens.access_token,
             refresh_token: session_tokens.refresh_token,
@@ -185,7 +196,7 @@ impl ClientHandler {
 
         // store the new username
         let echelon_store = self.app_handle.state::<StoreState>();
-        echelon_store.0.add_account(&new_client.user_id().unwrap().to_string())?;
+        echelon_store.0.add_account(&user_id)?;
 
         Ok(Some(ClientHandler {
             matrix_client: new_client,
@@ -222,7 +233,7 @@ impl ClientHandler {
         // If the user hasn't registered, we register them
         else {
             // Setup client metadata
-            let url = Url::parse("https://github.com/flaxeneel2/echelon/")?;
+            let url = Url::parse("https://echelon.sh/")?;
             let new_client_url = Localized::new(url, Vec::new());
             let grant_types: Vec<OAuthGrantType> = vec![
                 OAuthGrantType::AuthorizationCode {
@@ -255,10 +266,16 @@ impl ClientHandler {
             .await?;
 
         // store the session tokens in stronghold
-        let session_tokens = new_client.session_tokens().unwrap();
+        let session_tokens = new_client
+            .session_tokens()
+            .ok_or_else(|| anyhow::anyhow!("Missing session tokens after OAuth login"))?;
+        let user_id = new_client
+            .user_id()
+            .ok_or_else(|| anyhow::anyhow!("Missing user_id after OAuth login"))?
+            .to_string();
         let secrets = self.app_handle.state::<SecretState>();
         secrets.0.set_session(&Session {
-            user_id: new_client.user_id().unwrap().to_string(),
+            user_id: user_id.clone(),
             device_id: new_client.device_id().map(|d| d.to_string()).unwrap_or_default(),
             access_token: session_tokens.access_token,
             refresh_token: session_tokens.refresh_token,
@@ -266,7 +283,7 @@ impl ClientHandler {
 
         // store the new username
         let echelon_store = self.app_handle.state::<StoreState>();
-        echelon_store.0.add_account(&new_client.user_id().unwrap().to_string())?;
+        echelon_store.0.add_account(&user_id)?;
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());
 
@@ -291,32 +308,23 @@ impl ClientHandler {
         let sqlite_pwd = secrets.0.get_sqlite_pwd(&user_id)?;
 
         let new_client = self.get_new_client(&username, &homeserver, sqlite_pwd).await?;
-        match secrets.0.get_session(&*user_id) {
-            Ok(session_opt) => {
-                match session_opt {
-                    None => {
-                        error!("No session found for user, cannot restore");
-                    }
-                    Some(session) => {
-                        new_client
-                            .restore_session(AuthSession::Matrix(MatrixSession {
-                                meta: SessionMeta {
-                                    user_id: OwnedUserId::try_from(session.user_id)?,
-                                    device_id: OwnedDeviceId::try_from(session.device_id)?,
-                                },
-                                tokens: SessionTokens {
-                                    access_token: session.access_token,
-                                    refresh_token: session.refresh_token,
-                                }
-                            }))
-                            .await?
-                    }
+        let session = secrets
+            .0
+            .get_session(&user_id)?
+            .ok_or_else(|| anyhow::anyhow!("No stored session found for user"))?;
+
+        new_client
+            .restore_session(AuthSession::Matrix(MatrixSession {
+                meta: SessionMeta {
+                    user_id: OwnedUserId::try_from(session.user_id)?,
+                    device_id: OwnedDeviceId::try_from(session.device_id)?,
+                },
+                tokens: SessionTokens {
+                    access_token: session.access_token,
+                    refresh_token: session.refresh_token,
                 }
-            }
-            Err(e) => {
-                error!("Some other error on trying to make session: {e}");
-            }
-        }
+            }))
+            .await?;
 
 
         ClientEvents::register_events(&new_client, self.app_handle.clone());

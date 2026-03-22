@@ -23,7 +23,9 @@ use crate::ClientState;
 pub async fn get_spaces(state: State<'_, ClientState>) -> Result<Vec<SpaceRoom>, String> {
     let result = {
         let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
+        let Some(client_handler) = state_r.as_ref() else {
+            return Err("No active client session".to_string());
+        };
         client_handler
             .get_client()
             .joined_space_rooms()
@@ -65,7 +67,9 @@ pub async fn get_all_spaces_with_trees(
 ) -> Result<HashMap<String, RawSpace>, String> {
     // Get the client first.
     let state_r = state.0.read().await;
-    let client_handler = state_r.as_ref().unwrap();
+    let Some(client_handler) = state_r.as_ref() else {
+        return Err("No active client session".to_string());
+    };
     let client = client_handler.get_client();
 
     // Collect all futures so we can execute hierarchy fetches concurrently.
@@ -123,7 +127,9 @@ pub async fn get_space_tree(
 ) -> Result<Vec<SpaceRoom>, String> {
     // Get the client.
     let state_r = state.0.read().await;
-    let client_handler = state_r.as_ref().unwrap();
+    let Some(client_handler) = state_r.as_ref() else {
+        return Err("No active client session".to_string());
+    };
     let client = client_handler.get_client();
 
     // Parse the input room id and fetch it.

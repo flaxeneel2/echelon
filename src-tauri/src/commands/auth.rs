@@ -20,7 +20,9 @@ pub async fn oauth_login(
     // Call oauth_login in a separate scope to drop the read lock
     let result = {
         let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
+        let Some(client_handler) = state_r.as_ref() else {
+            return Err("No active client session".to_string());
+        };
         client_handler.oauth_login(homeserver, true).await
     };
 
@@ -56,7 +58,9 @@ pub async fn oauth_register(
     // Call oauth_login in a separate scope to drop the read lock
     let result = {
         let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
+        let Some(client_handler) = state_r.as_ref() else {
+            return Err("No active client session".to_string());
+        };
         client_handler.oauth_login(homeserver, false).await
     };
 
@@ -100,7 +104,9 @@ pub async fn register(
     // Call register in a separate scope so the read lock is dropped before write access.
     let handler = {
         let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
+        let Some(client_handler) = state_r.as_ref() else {
+            return Err("No active client session".to_string());
+        };
         client_handler
             .register(username, password, homeserver, registration_token)
             .await
@@ -141,7 +147,9 @@ pub async fn login(
     // Call login in a separate scope so the read lock is dropped before write access.
     let result = {
         let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
+        let Some(client_handler) = state_r.as_ref() else {
+            return Err("No active client session".to_string());
+        };
         client_handler.login(username, password, homeserver).await
     };
 
@@ -204,7 +212,9 @@ pub async fn restore_session(
     // Call restore_session in a separate scope so the read lock is dropped before write access.
     let handler = {
         let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
+        let Some(client_handler) = state_r.as_ref() else {
+            return Err("No active client session".to_string());
+        };
         client_handler.restore_session(username, homeserver).await
     };
 

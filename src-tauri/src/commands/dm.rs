@@ -22,7 +22,9 @@ use crate::ClientState;
 pub async fn get_dm_rooms(state: State<'_, ClientState>) -> Result<Vec<DmRoom>, String> {
     // Get the client.
     let state_r = state.0.read().await;
-    let client_handler = state_r.as_ref().unwrap();
+    let Some(client_handler) = state_r.as_ref() else {
+        return Err("No active client session".to_string());
+    };
     let client = client_handler.get_client();
     // Final DM room list to return.
     let mut dm_rooms: Vec<DmRoom> = Vec::new();

@@ -15,7 +15,9 @@ use crate::ClientState;
 pub async fn get_rooms(state: State<'_, ClientState>) -> Result<Vec<RawRoom>, String> {
     let result = {
         let state_r = state.0.read().await;
-        let client_handler = state_r.as_ref().unwrap();
+        let Some(client_handler) = state_r.as_ref() else {
+            return Err("No active client session".to_string());
+        };
         let rooms = client_handler.get_client().joined_rooms();
         let mut room_infos = Vec::new();
         for room in rooms {
