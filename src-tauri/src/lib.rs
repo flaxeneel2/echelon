@@ -14,6 +14,7 @@ mod keyring_client;
 mod rooms;
 mod secret;
 mod spaces;
+mod stronghold_backend;
 mod store;
 mod sync_manager;
 

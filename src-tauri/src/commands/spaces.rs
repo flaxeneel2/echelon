@@ -21,11 +21,7 @@ use crate::ClientState;
 /// prefer [`get_all_spaces_with_trees`] or [`get_space_tree`].
 #[tauri::command]
 pub async fn get_spaces(state: State<'_, ClientState>) -> Result<Vec<SpaceRoom>, String> {
-    let result = {
-        let state_r = state.0.read().await;
-        let Some(client_handler) = state_r.as_ref() else {
-            return Err("No active client session".to_string());
-        };
+    let result = super::with_active_client(&state, |client_handler| {
         client_handler
             .get_client()
             .joined_space_rooms()
@@ -48,7 +44,8 @@ pub async fn get_spaces(state: State<'_, ClientState>) -> Result<Vec<SpaceRoom>,
                 }
             })
             .collect::<Vec<SpaceRoom>>()
-    };
+    })
+    .await?;
     Ok(result)
 }
 
@@ -65,15 +62,13 @@ pub async fn get_spaces(state: State<'_, ClientState>) -> Result<Vec<SpaceRoom>,
 pub async fn get_all_spaces_with_trees(
     state: State<'_, ClientState>,
 ) -> Result<HashMap<String, RawSpace>, String> {
-    // Get the client first.
-    let state_r = state.0.read().await;
-    let Some(client_handler) = state_r.as_ref() else {
-        return Err("No active client session".to_string());
-    };
-    let client = client_handler.get_client();
+    // Get joined spaces first.
+    let joined_spaces =
+        super::with_active_client(&state, |client_handler| client_handler.get_client().joined_space_rooms())
+            .await?;
 
     // Collect all futures so we can execute hierarchy fetches concurrently.
-    let tasks = client.joined_space_rooms().into_iter().map(|space| {
+    let tasks = joined_spaces.into_iter().map(|space| {
         let space_id = space.room_id().to_string();
         let state_clone = state.clone();
         async move {

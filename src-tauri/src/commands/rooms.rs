@@ -13,11 +13,7 @@ use crate::ClientState;
     note = "I don't see why this needs to exist anymore, get_all_spaces_with_trees should cover all the same use cases and more. This function will be removed soon after i discuss w/ others"
 )]
 pub async fn get_rooms(state: State<'_, ClientState>) -> Result<Vec<RawRoom>, String> {
-    let result = {
-        let state_r = state.0.read().await;
-        let Some(client_handler) = state_r.as_ref() else {
-            return Err("No active client session".to_string());
-        };
+    let result = super::with_active_client(&state, |client_handler| {
         let rooms = client_handler.get_client().joined_rooms();
         let mut room_infos = Vec::new();
         for room in rooms {
@@ -35,7 +31,8 @@ pub async fn get_rooms(state: State<'_, ClientState>) -> Result<Vec<RawRoom>, St
             })
         }
         room_infos
-    };
+    })
+    .await?;
     Ok(result)
 }
 
