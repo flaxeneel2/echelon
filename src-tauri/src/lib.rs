@@ -1,4 +1,4 @@
-use crate::user::{
+use crate::commands::{
     get_all_spaces_with_trees, get_dm_rooms, get_rooms, get_space_tree, get_spaces, login, logout,
     oauth_login, oauth_register, register, reset_account, restore_session,
 };
@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 
 mod account;
 mod client_handler;
+mod commands;
 mod events;
 mod keyring_client;
 mod rooms;
@@ -15,7 +16,6 @@ mod secret;
 mod spaces;
 mod store;
 mod sync_manager;
-mod user;
 
 use client_handler::ClientHandler;
 use keyring_client::KeyringClient;
